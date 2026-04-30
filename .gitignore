@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.aws-sam/
+.env
+.env.*
+!.env.example
+*.js.map
+coverage/
+.nyc_output/
+samconfig.toml
+*.log
+.DS_Store
+build/

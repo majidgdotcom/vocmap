@@ -1,0 +1,115 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Shared Infrastructure - DynamoDB, Cognito, CloudWatch
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, staging, prod]
+    Default: dev
+
+Resources:
+
+  TodoTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    Properties:
+      TableName: !Sub 'vocmap-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub 'vocmap-users-${Environment}'
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+      MfaConfiguration: 'OFF'
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub 'vocmap-web-${Environment}'
+      UserPoolId: !Ref CognitoUserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_PASSWORD_AUTH
+      PreventUserExistenceErrors: ENABLED
+      SupportedIdentityProviders:
+        - COGNITO
+
+  TodoServiceLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/vocmap-todo-service-${Environment}'
+      RetentionInDays: 30
+
+  KeywordServiceLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/vocmap-keyword-service-${Environment}'
+      RetentionInDays: 30
+
+Outputs:
+  DynamoTableName:
+    Value: !Ref TodoTable
+    Export:
+      Name: !Sub '${Environment}-DynamoTableName'
+  DynamoTableArn:
+    Value: !GetAtt TodoTable.Arn
+    Export:
+      Name: !Sub '${Environment}-DynamoTableArn'
+  CognitoUserPoolId:
+    Value: !Ref CognitoUserPool
+    Export:
+      Name: !Sub '${Environment}-CognitoUserPoolId'
+  CognitoUserPoolArn:
+    Value: !GetAtt CognitoUserPool.Arn
+    Export:
+      Name: !Sub '${Environment}-CognitoUserPoolArn'
+  CognitoClientId:
+    Value: !Ref CognitoUserPoolClient
+    Export:
+      Name: !Sub '${Environment}-CognitoClientId'

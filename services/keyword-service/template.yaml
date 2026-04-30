@@ -1,0 +1,152 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Keyword Service
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, staging, prod]
+  CognitoUserPoolArn:
+    Type: String
+  DynamoTableName:
+    Type: String
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    MemorySize: 256
+    Timeout: 10
+    CodeUri: ../../
+    Environment:
+      Variables:
+        DYNAMO_TABLE: !Ref DynamoTableName
+        ENVIRONMENT: !Ref Environment
+        AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
+
+Resources:
+
+  KeywordApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Ref Environment
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key'"
+        AllowOrigin: "'*'"
+        MaxAge: "'600'"
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !Ref CognitoUserPoolArn
+        AddDefaultAuthorizerToCorsPreflight: false
+
+  AddKeywordsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: services/keyword-service/src/handlers/add-keywords.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DynamoTableName
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref KeywordApi
+            Path: /todos/{todoId}/keywords
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints: [services/keyword-service/src/handlers/add-keywords.ts]
+        Bundle: true
+        Minify: false
+        TreeShaking: true
+        Target: es2020
+        External:
+          - '@aws-sdk/client-dynamodb'
+          - '@aws-sdk/lib-dynamodb'
+
+  GetKeywordsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: services/keyword-service/src/handlers/get-keywords.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref DynamoTableName
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref KeywordApi
+            Path: /todos/{todoId}/keywords
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints: [services/keyword-service/src/handlers/get-keywords.ts]
+        Bundle: true
+        Minify: false
+        TreeShaking: true
+        Target: es2020
+        External:
+          - '@aws-sdk/client-dynamodb'
+          - '@aws-sdk/lib-dynamodb'
+
+  DeleteKeywordFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: services/keyword-service/src/handlers/delete-keyword.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DynamoTableName
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref KeywordApi
+            Path: /todos/{todoId}/keywords/{keywordId}
+            Method: DELETE
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints: [services/keyword-service/src/handlers/delete-keyword.ts]
+        Bundle: true
+        Minify: false
+        TreeShaking: true
+        Target: es2020
+        External:
+          - '@aws-sdk/client-dynamodb'
+          - '@aws-sdk/lib-dynamodb'
+
+  GetTodosByKeywordFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: services/keyword-service/src/handlers/get-todos-by-keyword.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref DynamoTableName
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref KeywordApi
+            Path: /keywords/{keywordId}/todos
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints: [services/keyword-service/src/handlers/get-todos-by-keyword.ts]
+        Bundle: true
+        Minify: false
+        TreeShaking: true
+        Target: es2020
+        External:
+          - '@aws-sdk/client-dynamodb'
+          - '@aws-sdk/lib-dynamodb'
+
+Outputs:
+  KeywordApiUrl:
+    Value: !Sub 'https://${KeywordApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+    Export:
+      Name: !Sub '${Environment}-KeywordApiUrl'
