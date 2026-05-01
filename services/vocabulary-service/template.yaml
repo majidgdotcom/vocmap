@@ -1,0 +1,130 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Vocabulary Service — saves validated word-family JSON to DynamoDB
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, staging, prod]
+  CognitoUserPoolArn:
+    Type: String
+  DynamoTableName:
+    Type: String
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    MemorySize: 256
+    Timeout: 15          # batch writes may take slightly longer than simple ops
+    CodeUri: ../../
+    Environment:
+      Variables:
+        DYNAMO_TABLE: !Ref DynamoTableName
+        ENVIRONMENT: !Ref Environment
+        AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
+
+Resources:
+
+  # ── API Gateway ──────────────────────────────────────────────────────────────
+  VocabularyApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Ref Environment
+      Cors:
+        AllowMethods: "'GET,POST,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key'"
+        AllowOrigin: "'*'"
+        MaxAge: "'600'"
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !Ref CognitoUserPoolArn
+        AddDefaultAuthorizerToCorsPreflight: false
+
+  # ── POST /word-families/batch ─────────────────────────────────────────────
+  BatchSaveFamiliesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: services/vocabulary-service/src/handlers/batch-save-families.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DynamoTableName
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VocabularyApi
+            Path: /word-families/batch
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints: [services/vocabulary-service/src/handlers/batch-save-families.ts]
+        Bundle: true
+        Minify: false
+        TreeShaking: true
+        Target: es2020
+        External:
+          - '@aws-sdk/client-dynamodb'
+          - '@aws-sdk/lib-dynamodb'
+
+  # ── GET /word-families ────────────────────────────────────────────────────
+  GetFamiliesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: services/vocabulary-service/src/handlers/get-families.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref DynamoTableName
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VocabularyApi
+            Path: /word-families
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints: [services/vocabulary-service/src/handlers/get-families.ts]
+        Bundle: true
+        Minify: false
+        TreeShaking: true
+        Target: es2020
+        External:
+          - '@aws-sdk/client-dynamodb'
+          - '@aws-sdk/lib-dynamodb'
+
+  # ── DELETE /word-families/{familyId} ──────────────────────────────────────
+  DeleteFamilyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: services/vocabulary-service/src/handlers/delete-family.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DynamoTableName
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VocabularyApi
+            Path: /word-families/{familyId}
+            Method: DELETE
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints: [services/vocabulary-service/src/handlers/delete-family.ts]
+        Bundle: true
+        Minify: false
+        TreeShaking: true
+        Target: es2020
+        External:
+          - '@aws-sdk/client-dynamodb'
+          - '@aws-sdk/lib-dynamodb'
+
+Outputs:
+  VocabularyApiUrl:
+    Value: !Sub 'https://${VocabularyApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+    Export:
+      Name: !Sub '${Environment}-VocabularyApiUrl'
