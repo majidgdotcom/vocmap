@@ -2,7 +2,7 @@
 
 # VocMap
 
-**Production-grade serverless vocmaplication — AWS Lambda microservices + React MVVM frontend**
+**Production-grade serverless vocabulary application — AWS Lambda microservices + React MVVM frontend**
 
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?logo=typescript)
 ![AWS SAM](https://img.shields.io/badge/AWS-SAM-orange?logo=amazon-aws)
@@ -20,6 +20,7 @@ A full-stack serverless monorepo built with clean architecture principles, AWS L
 
 - ✅ **Todo CRUD** — create, read, update, delete, archive
 - 🏷 **Multi-keyword tagging** — add multiple keywords per todo, filter by keyword
+- 📚 **Vocabulary Map** — save validated word-family JSON blocks to DynamoDB in batch, tag and browse your personal vocabulary
 - 🔐 **Auth** — Amazon Cognito JWT authentication (sign up, sign in, confirm)
 - ⚡ **Serverless** — independent Lambda per endpoint, pay-per-request DynamoDB
 - 🧱 **Clean architecture** — Domain → Application → Infrastructure → Handler per service
@@ -33,14 +34,15 @@ A full-stack serverless monorepo built with clean architecture principles, AWS L
 ```
 vocmap/
 ├── packages/
-│   └── shared/              # Entities, DTOs, Zod schemas, DynamoDB key helpers
+│   └── shared/                 # Entities, DTOs, Zod schemas, DynamoDB key helpers
 ├── services/
-│   ├── todo-service/        # Todo CRUD — 6 Lambda functions
-│   └── keyword-service/     # Keyword management — 4 Lambda functions
+│   ├── todo-service/           # Todo CRUD — 6 Lambda functions
+│   ├── keyword-service/        # Keyword management — 4 Lambda functions
+│   └── vocabulary-service/     # Word-family batch save — 3 Lambda functions
 ├── infrastructure/
-│   └── template.yaml        # DynamoDB + Cognito + CloudWatch (CloudFormation)
-├── frontend/                # React + TypeScript + MVVM
-└── .github/workflows/       # CI + CD pipelines
+│   └── template.yaml           # DynamoDB + Cognito + CloudWatch (CloudFormation)
+├── frontend/                   # React + TypeScript + MVVM
+└── .github/workflows/          # CI + CD pipelines
 ```
 
 ### Backend — Clean Architecture (per service)
@@ -59,12 +61,14 @@ src/
 |---|---|---|---|---|
 | `USER#<userId>` | `TODO#<todoId>` | `USER#<userId>` | `CREATED#<iso>` | TODO |
 | `USER#<userId>` | `KEYWORD#<todoId>#<kwId>` | `TODO#<todoId>` | `KEYWORD#<kwId>` | KEYWORD |
+| `USER#<userId>` | `FAMILY#<familyId>` | `USER#<userId>` | `SAVED#<iso>` | WORD_FAMILY |
 
 - Row-level isolation by `userId` in every PK — zero cross-user data leakage
 - GSI1 on todos sorted by `createdAt` descending — efficient paginated list queries
 - GSI1 on keywords grouped by `todoId` — O(1) keyword lookup per todo
+- GSI1 on word families sorted by `savedAt` descending — same index, distinct `SAVED#` prefix
 - Conditional writes prevent duplicate creation and lost updates
-- DynamoDB Transactions for atomic multi-keyword batch writes
+- DynamoDB BatchWrite (chunks of 25) for atomic multi-family saves with exponential back-off retry on `UnprocessedItems`
 
 ### API Gateway + Cognito Auth Flow
 
@@ -171,9 +175,19 @@ sam deploy --guided \
     CognitoUserPoolArn=<CognitoUserPoolArn from stack outputs> \
     DynamoTableName=vocmap-dev
 # Stack name: vocmap-keyword-service-dev
+
+# Vocabulary service
+cd ../vocabulary-service
+sam build
+sam deploy --guided \
+  --parameter-overrides \
+    Environment=dev \
+    CognitoUserPoolArn=<CognitoUserPoolArn from stack outputs> \
+    DynamoTableName=vocmap-dev
+# Stack name: vocmap-vocabulary-service-dev
 ```
 
-Both deploys print API URLs in the Outputs section — note them for the frontend.
+All three deploys print API URLs in the Outputs section — note them for the frontend.
 
 ### 4. Configure and run frontend
 
@@ -185,10 +199,11 @@ cp .env.example .env.local
 Fill in `.env.local` with values from the deploy outputs:
 
 ```env
-VITE_API_TODO_URL=https://xxxxxxxxxx.execute-api.us-east-1.amazonaws.com/dev
-VITE_API_KEYWORD_URL=https://yyyyyyyyyy.execute-api.us-east-1.amazonaws.com/dev
+VITE_API_TODO_URL=https://<todo-api-id>.execute-api.us-east-1.amazonaws.com/dev
+VITE_API_KEYWORD_URL=https://<keyword-api-id>.execute-api.us-east-1.amazonaws.com/dev
+VITE_API_VOCAB_URL=https://<vocab-api-id>.execute-api.us-east-1.amazonaws.com/dev
 VITE_COGNITO_USER_POOL_ID=us-east-1_XXXXXXXXX
-VITE_COGNITO_CLIENT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxx
+VITE_COGNITO_CLIENT_ID=XXXXXXXXXXXXXXXXXXXXXXXXXX
 VITE_AWS_REGION=us-east-1
 ```
 
@@ -223,6 +238,34 @@ yarn dev
 | `DELETE` | `/todos/:id/keywords/:kwId` | ✅ | Delete a keyword |
 | `GET` | `/keywords/:kwId/todos` | ✅ | Get todos by keyword |
 
+### Vocabulary Service
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `POST` | `/word-families/batch` | ✅ | Batch save word families (1–50) |
+| `GET` | `/word-families` | ✅ | List saved families (paginated) |
+| `DELETE` | `/word-families/:familyId` | ✅ | Delete a word family |
+
+**Query params for `GET /word-families`:** `limit` (1–100, default 50), `lastKey` (pagination cursor), `tag` (filter by tag)
+
+**Request body for `POST /word-families/batch`:**
+```json
+{
+  "families": [
+    {
+      "title": "\"provide\" family",
+      "words": [
+        { "word": "provide",  "type": "verb",      "typeCode": 2, "mean": "فراهم کردن" },
+        { "word": "provider", "type": "noun",      "typeCode": 1, "mean": "ارائه‌دهنده" },
+        { "word": "provision","type": "noun",      "typeCode": 1, "mean": "تأمین" }
+      ],
+      "tags": ["B2", "chapter-5"],
+      "notes": "Common academic vocabulary"
+    }
+  ]
+}
+```
+
 ---
 
 ## CI/CD Pipeline
@@ -236,15 +279,16 @@ feature/* → develop → main
 ### CI (runs on every PR)
 1. Lint + typecheck all workspaces
 2. Unit tests with coverage
-3. SAM build check
+3. SAM build check (todo, keyword, vocabulary)
 4. Integration tests against dev stack (on `develop` push)
 
 ### CD (runs on merge)
 1. Deploy infrastructure stack
 2. Deploy todo-service
 3. Deploy keyword-service
-4. Build + deploy frontend to S3 + CloudFront invalidation
-5. QA smoke tests gate on staging before production
+4. Deploy vocabulary-service
+5. Build + deploy frontend to S3 + CloudFront invalidation
+6. QA smoke tests gate on staging before production
 
 ### GitHub Secrets needed
 
@@ -268,13 +312,9 @@ feature/* → develop → main
 ```bash
 yarn workspace @vocmap/todo-service test:unit
 yarn workspace @vocmap/keyword-service test:unit
+yarn workspace @vocmap/vocabulary-service test:unit
 yarn workspace @vocmap/frontend test:unit
 ```
-
-Expected output — 16 tests across 3 workspaces:
-- todo-service: 5 passed (TodoUseCases — create, ownership, archive)
-- keyword-service: 6 passed (KeywordUseCases — add, get, delete)
-- frontend: 5 passed (TodoViewModel — active, archived, completed, description)
 
 ### Integration tests
 
@@ -283,31 +323,27 @@ Requires a deployed dev stack. First create a test user and get a token:
 ```bash
 # Create test user (one time only)
 aws cognito-idp admin-create-user \
-  --user-pool-id <YOUR_POOL_ID> \
-  --username test@todoapp.com \
+  --user-pool-id us-east-1_8CmwMwDD6 \
+  --username test@vocmap.com \
   --temporary-password Test1234! \
   --message-action SUPPRESS
 
 aws cognito-idp admin-set-user-password \
-  --user-pool-id <YOUR_POOL_ID> \
-  --username test@todoapp.com \
+  --user-pool-id us-east-1_8CmwMwDD6 \
+  --username test@vocmap.com \
   --password Test1234! \
   --permanent
 
-# Export env vars (all in same terminal session)
-export TEST_ID_TOKEN=
-
+# Export env vars
+export TEST_ID_TOKEN=<token>
 export TODO_API_URL=https://<todo-api-id>.execute-api.us-east-1.amazonaws.com/dev
 export KEYWORD_API_URL=https://<keyword-api-id>.execute-api.us-east-1.amazonaws.com/dev
+export VOCAB_API_URL=https://bqgk7zdbm9.execute-api.us-east-1.amazonaws.com/dev
 
 # Run integration tests
 yarn workspace @vocmap/todo-service test:integration
+yarn workspace @vocmap/vocabulary-service test:integration
 ```
-
-Expected output — 9/9 passed:
-- Todo CRUD: create, list, get, update
-- Keywords: add bulk, list, delete
-- Archive + cleanup: archive, delete
 
 ---
 
@@ -317,8 +353,10 @@ Expected output — 9/9 passed:
 # 1. Delete service stacks first
 aws cloudformation delete-stack --stack-name vocmap-todo-service-dev
 aws cloudformation delete-stack --stack-name vocmap-keyword-service-dev
+aws cloudformation delete-stack --stack-name vocmap-vocabulary-service-dev
 aws cloudformation wait stack-delete-complete --stack-name vocmap-todo-service-dev
 aws cloudformation wait stack-delete-complete --stack-name vocmap-keyword-service-dev
+aws cloudformation wait stack-delete-complete --stack-name vocmap-vocabulary-service-dev
 
 # 2. Delete infrastructure stack
 # Note: DynamoDB table is retained due to DeletionPolicy: Retain
@@ -329,8 +367,12 @@ aws cloudformation wait stack-delete-complete --stack-name vocmap-infra-dev
 aws dynamodb delete-table --table-name vocmap-dev
 
 # 4. Clean local artifacts
-rm -rf services/todo-service/.aws-sam services/keyword-service/.aws-sam
-rm -f services/todo-service/samconfig.toml services/keyword-service/samconfig.toml
+rm -rf services/todo-service/.aws-sam \
+       services/keyword-service/.aws-sam \
+       services/vocabulary-service/.aws-sam
+rm -f  services/todo-service/samconfig.toml \
+       services/keyword-service/samconfig.toml \
+       services/vocabulary-service/samconfig.toml
 ```
 
 ---
@@ -339,7 +381,7 @@ rm -f services/todo-service/samconfig.toml services/keyword-service/samconfig.to
 
 ```
 packages/shared/src/
-├── entities/          # TodoEntity, KeywordEntity interfaces
+├── entities/          # TodoEntity, KeywordEntity, WordFamilyEntity
 ├── schemas/           # Zod validation schemas (shared FE + BE)
 ├── dtos/              # API response types
 └── types/             # DynamoDB key helpers
@@ -350,13 +392,25 @@ services/todo-service/src/
 ├── infrastructure/    # DynamoTodoRepository
 └── handlers/          # create-todo.ts, get-todos.ts, ...
 
+services/keyword-service/src/
+├── domain/            # KeywordDomain
+├── application/       # KeywordUseCases + IKeywordRepository interface
+├── infrastructure/    # DynamoKeywordRepository
+└── handlers/          # add-keywords.ts, get-keywords.ts, ...
+
+services/vocabulary-service/src/
+├── domain/            # WordFamilyDomain — pure factory + ownership guard
+├── application/       # WordFamilyUseCases + IWordFamilyRepository interface
+├── infrastructure/    # DynamoWordFamilyRepository (BatchWrite, chunks of 25)
+└── handlers/          # batch-save-families.ts, get-families.ts, delete-family.ts
+
 frontend/src/
 ├── viewmodels/        # TodoViewModel — presentation logic, no React
-├── services/          # React Query hooks (todo.service.ts, keyword.service.ts)
+├── services/          # React Query hooks (todo, keyword, word-family)
 ├── store/slices/      # selectedTodo.slice.ts, keywordFilter.slice.ts
 ├── hooks/             # useAuth, useSelectedTodo, useTodoForm
 ├── components/        # TodoCard, TodoDetailPanel, KeywordPanel, ...
-└── pages/             # LoginPage, TodosPage
+└── pages/             # LoginPage, TodosPage, WordFamilyPage
 ```
 
 ---
