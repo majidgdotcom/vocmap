@@ -9,6 +9,7 @@ import { store } from '@/store';
 import { ProtectedRoute } from '@/components/common/ProtectedRoute';
 import { LoginPage } from '@/pages/LoginPage';
 import { TodosPage } from '@/pages/TodosPage';
+import { WordFamilyPage } from '@/pages/WordFamilyPage';
 
 // Boot Amplify / Cognito once at module level
 configureAmplify();
@@ -40,6 +41,14 @@ const App: React.FC = () => (
             element={
               <ProtectedRoute>
                 <TodosPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/word-families"
+            element={
+              <ProtectedRoute>
+                <WordFamilyPage />
               </ProtectedRoute>
             }
           />
