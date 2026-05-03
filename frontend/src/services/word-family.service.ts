@@ -1,5 +1,5 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { vocabApi } from '@/config/api-client';
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { vocabApi, vocabApiRaw } from '@/config/api-client';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -33,8 +33,11 @@ export interface WordFamilyEntity {
   updatedAt: string;
 }
 
-export interface WordFamilyListResult {
-  items: WordFamilyEntity[];
+// Full envelope the Lambda returns:
+// { success: true, data: WordFamilyEntity[], count: number, lastKey?: string }
+interface FamiliesEnvelope {
+  success: boolean;
+  data: WordFamilyEntity[];
   count: number;
   lastKey?: string;
 }
@@ -43,19 +46,25 @@ export interface WordFamilyListResult {
 
 export const wordFamilyKeys = {
   all:   ['wordFamilies'] as const,
-  lists: () => [...wordFamilyKeys.all, 'list'] as const,
+  lists: ()             => [...wordFamilyKeys.all, 'list'] as const,
   list:  (tag?: string) => [...wordFamilyKeys.lists(), { tag }] as const,
 };
 
-// ── Queries ───────────────────────────────────────────────────────────────────
+// ── Infinite query ────────────────────────────────────────────────────────────
 
-export function useWordFamilies(tag?: string) {
-  const params = new URLSearchParams({ limit: '50' });
-  if (tag) params.set('tag', tag);
+const PAGE_SIZE = 50;
 
-  return useQuery({
+export function useInfiniteWordFamilies(tag?: string) {
+  return useInfiniteQuery<FamiliesEnvelope, Error>({
     queryKey: wordFamilyKeys.list(tag),
-    queryFn:  () => vocabApi.get<WordFamilyEntity[]>(`/word-families?${params}`),
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
+      if (tag) params.set('tag', tag);
+      if (typeof pageParam === 'string') params.set('lastKey', pageParam);
+      return vocabApiRaw.get<FamiliesEnvelope>(`/word-families?${params}`);
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.lastKey ?? undefined,
   });
 }
 
@@ -74,6 +83,6 @@ export function useDeleteWordFamily() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (familyId: string) => vocabApi.delete(`/word-families/${familyId}`),
-    onSuccess:  () => qc.invalidateQueries({ queryKey: wordFamilyKeys.lists() }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: wordFamilyKeys.lists() }),
   });
 }

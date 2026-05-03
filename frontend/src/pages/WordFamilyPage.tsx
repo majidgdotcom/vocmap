@@ -3,7 +3,7 @@ import React, { useState, useCallback } from 'react';
 import { TopBar } from '@/components/layout/TopBar';
 import {
   useBatchSaveFamilies,
-  useWordFamilies,
+  useInfiniteWordFamilies,
   useDeleteWordFamily,
   WordFamilyEntity,
   SaveWordFamilyInput,
@@ -441,16 +441,99 @@ function BatchSaveBar({ validBlocks, onSaved }: { validBlocks: JSONBlock[]; onSa
 
 // ─── SavedFamiliesPanel ───────────────────────────────────────────────────────
 
+function FamilyCard({ entry, isExpanded, isConfirming, onToggle, onConfirm, onCancelConfirm, onDelete }: {
+  entry: WordFamilyEntity;
+  isExpanded: boolean;
+  isConfirming: boolean;
+  onToggle: () => void;
+  onConfirm: () => void;
+  onCancelConfirm: () => void;
+  onDelete: () => void;
+}) {
+  const date = new Date(entry.savedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const cats = entry.words.reduce<Record<string, number>>((acc, w) => { const c = getCategory(w.type); acc[c] = (acc[c] ?? 0) + 1; return acc; }, {});
+
+  return (
+    <div style={{ border: '1px solid #d5e8d4', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+      <div style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', background: '#F4FCF8', gap: 10, flexWrap: 'wrap' }}>
+        <span onClick={onToggle} style={{ fontSize: 13, fontWeight: 700, color: '#1a1a1a', fontFamily: 'monospace', cursor: 'pointer', flex: '0 0 auto' }}>
+          {entry.title}
+        </span>
+        {Object.entries(cats).map(([cat, count]) => (
+          <span key={cat} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 999, background: CAT_BG[cat] ?? '#f5f5f5', color: CAT_COLOR[cat] ?? '#555', fontWeight: 600 }}>
+            {cat} ×{count}
+          </span>
+        ))}
+        {entry.tags.map(tag => (
+          <span key={tag} style={{ fontSize: 10, padding: '2px 9px', borderRadius: 999, background: '#EEEDFE', color: '#534AB7', fontWeight: 500 }}>
+            {tag}
+          </span>
+        ))}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <span style={{ fontSize: 11, color: '#bbb' }}>{date}</span>
+          {!isConfirming ? (
+            <button onClick={onConfirm} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 6, background: 'transparent', color: '#ccc', border: '1px solid #e8e8e8', cursor: 'pointer' }}>✕</button>
+          ) : (
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              <span style={{ fontSize: 11, color: '#993C1D' }}>Delete?</span>
+              <button onClick={onDelete} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 6, background: '#993C1D', color: '#fff', border: 'none', cursor: 'pointer' }}>Yes</button>
+              <button onClick={onCancelConfirm} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 6, background: 'transparent', color: '#888', border: '1px solid #e0e0e0', cursor: 'pointer' }}>No</button>
+            </div>
+          )}
+          <button onClick={onToggle} style={{ fontSize: 12, color: '#bbb', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+            {isExpanded ? '▲' : '▼'}
+          </button>
+        </div>
+      </div>
+      {isExpanded && (
+        <div style={{ padding: '12px 14px', borderTop: '1px solid #e8f5e8' }}>
+          {entry.notes && (
+            <div style={{ fontSize: 12, color: '#555', background: '#f7fbf7', padding: '8px 12px', borderRadius: 6, marginBottom: 10, borderLeft: '3px solid #9FE1CB', lineHeight: 1.5 }}>
+              {entry.notes}
+            </div>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {entry.words.map((w, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '6px 10px', borderRadius: 6, background: '#fafafa', border: '1px solid #f0f0f0' }}>
+                <span style={{ fontWeight: 700, fontSize: 13, minWidth: 120, fontFamily: 'monospace' }}>{w.word}</span>
+                <TypeBadge type={w.type} />
+                <span style={{ fontSize: 11, color: '#ccc', fontFamily: 'monospace' }}>code:{w.typeCode}</span>
+                <span style={{ fontSize: 12, color: '#666', flex: 1 }}>{w.mean}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SavedFamiliesPanel() {
-  const { data, isLoading, isError } = useWordFamilies();
-  const deleteFamily = useDeleteWordFamily();
+  const {
+    data,
+    isLoading,
+    isError,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+  } = useInfiniteWordFamilies();
+
+  const deleteFamily  = useDeleteWordFamily();
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [confirmId, setConfirmId]   = useState<string | null>(null);
+  const [confirmId,  setConfirmId]  = useState<string | null>(null);
 
-  if (isLoading) return <div style={{ fontSize: 13, color: '#aaa', padding: '20px 0' }}>Loading saved families…</div>;
-  if (isError)   return <div style={{ fontSize: 13, color: '#993C1D', padding: '20px 0' }}>Failed to load saved families.</div>;
+  if (isLoading) return (
+    <div style={{ fontSize: 13, color: '#aaa', padding: '20px 0', textAlign: 'center' }}>Loading saved families…</div>
+  );
+  if (isError) return (
+    <div style={{ fontSize: 13, color: '#993C1D', padding: '20px 0' }}>Failed to load saved families.</div>
+  );
 
-  const items: WordFamilyEntity[] = data ?? [];
+  // Flatten all pages into one list
+  const items: WordFamilyEntity[] = data?.pages.flatMap(p => p.data) ?? [];
+  const totalLoaded = items.length;
+  const totalOnServer = data?.pages[0]?.count ?? 0; // first page carries the full count if backend provides it
+
   if (items.length === 0) return (
     <div style={{ textAlign: 'center', padding: '28px', border: '2px dashed #eee', borderRadius: 10, color: '#aaa', fontSize: 13 }}>
       No word families saved yet. Analyze text above and save valid blocks.
@@ -459,69 +542,55 @@ function SavedFamiliesPanel() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {items.map(entry => {
-        const isExpanded  = expandedId === entry.familyId;
-        const isConfirming = confirmId === entry.familyId;
-        const date = new Date(entry.savedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        const cats = entry.words.reduce<Record<string, number>>((acc, w) => { const c = getCategory(w.type); acc[c] = (acc[c] ?? 0) + 1; return acc; }, {});
 
-        return (
-          <div key={entry.familyId} style={{ border: '1px solid #d5e8d4', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
-            <div style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', background: '#F4FCF8', gap: 10, flexWrap: 'wrap' }}>
-              <span
-                onClick={() => setExpandedId(isExpanded ? null : entry.familyId)}
-                style={{ fontSize: 13, fontWeight: 700, color: '#1a1a1a', fontFamily: 'monospace', cursor: 'pointer', flex: '0 0 auto' }}
-              >
-                {entry.title}
-              </span>
-              {Object.entries(cats).map(([cat, count]) => (
-                <span key={cat} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 999, background: CAT_BG[cat] ?? '#f5f5f5', color: CAT_COLOR[cat] ?? '#555', fontWeight: 600 }}>
-                  {cat} ×{count}
-                </span>
-              ))}
-              {entry.tags.map(tag => (
-                <span key={tag} style={{ fontSize: 10, padding: '2px 9px', borderRadius: 999, background: '#EEEDFE', color: '#534AB7', fontWeight: 500 }}>
-                  {tag}
-                </span>
-              ))}
-              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                <span style={{ fontSize: 11, color: '#bbb' }}>{date}</span>
-                {!isConfirming ? (
-                  <button onClick={() => setConfirmId(entry.familyId)} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 6, background: 'transparent', color: '#ccc', border: '1px solid #e8e8e8', cursor: 'pointer' }}>✕</button>
-                ) : (
-                  <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                    <span style={{ fontSize: 11, color: '#993C1D' }}>Delete?</span>
-                    <button onClick={() => { deleteFamily.mutate(entry.familyId); setConfirmId(null); }} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 6, background: '#993C1D', color: '#fff', border: 'none', cursor: 'pointer' }}>Yes</button>
-                    <button onClick={() => setConfirmId(null)} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 6, background: 'transparent', color: '#888', border: '1px solid #e0e0e0', cursor: 'pointer' }}>No</button>
-                  </div>
-                )}
-                <button onClick={() => setExpandedId(isExpanded ? null : entry.familyId)} style={{ fontSize: 12, color: '#bbb', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                  {isExpanded ? '▲' : '▼'}
-                </button>
-              </div>
-            </div>
-            {isExpanded && (
-              <div style={{ padding: '12px 14px', borderTop: '1px solid #e8f5e8' }}>
-                {entry.notes && (
-                  <div style={{ fontSize: 12, color: '#555', background: '#f7fbf7', padding: '8px 12px', borderRadius: 6, marginBottom: 10, borderLeft: '3px solid #9FE1CB', lineHeight: 1.5 }}>
-                    {entry.notes}
-                  </div>
-                )}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {entry.words.map((w, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '6px 10px', borderRadius: 6, background: '#fafafa', border: '1px solid #f0f0f0' }}>
-                      <span style={{ fontWeight: 700, fontSize: 13, minWidth: 120, fontFamily: 'monospace' }}>{w.word}</span>
-                      <TypeBadge type={w.type} />
-                      <span style={{ fontSize: 11, color: '#ccc', fontFamily: 'monospace' }}>code:{w.typeCode}</span>
-                      <span style={{ fontSize: 12, color: '#666', flex: 1 }}>{w.mean}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        );
-      })}
+      {/* Stats bar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12, color: '#888' }}>
+          Showing <strong style={{ color: '#1a1a1a' }}>{totalLoaded}</strong> families
+          {hasNextPage && <span style={{ color: '#aaa' }}> — more available</span>}
+          {!hasNextPage && <span style={{ color: '#0F6E56' }}> — all loaded</span>}
+        </span>
+      </div>
+
+      {/* Family cards */}
+      {items.map(entry => (
+        <FamilyCard
+          key={entry.familyId}
+          entry={entry}
+          isExpanded={expandedId === entry.familyId}
+          isConfirming={confirmId === entry.familyId}
+          onToggle={() => setExpandedId(id => id === entry.familyId ? null : entry.familyId)}
+          onConfirm={() => setConfirmId(entry.familyId)}
+          onCancelConfirm={() => setConfirmId(null)}
+          onDelete={() => { deleteFamily.mutate(entry.familyId); setConfirmId(null); }}
+        />
+      ))}
+
+      {/* Load more */}
+      {hasNextPage && (
+        <button
+          onClick={() => fetchNextPage()}
+          disabled={isFetchingNextPage}
+          style={{
+            marginTop: 8, padding: '10px 0', width: '100%', borderRadius: 10,
+            border: '1.5px dashed #c7d2fe', background: isFetchingNextPage ? '#f5f5f5' : '#fff',
+            color: isFetchingNextPage ? '#aaa' : '#6366f1',
+            fontSize: 13, fontWeight: 600, cursor: isFetchingNextPage ? 'not-allowed' : 'pointer',
+            transition: 'background 0.15s',
+          }}
+        >
+          {isFetchingNextPage
+            ? 'Loading…'
+            : `Load next 50 →`}
+        </button>
+      )}
+
+      {/* End of list marker */}
+      {!hasNextPage && items.length > 50 && (
+        <div style={{ textAlign: 'center', fontSize: 11, color: '#bbb', padding: '10px 0' }}>
+          All {totalLoaded} families loaded
+        </div>
+      )}
     </div>
   );
 }
