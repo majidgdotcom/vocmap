@@ -144,6 +144,7 @@ export class DynamoWordFamilyRepository implements IWordFamilyRepository {
       wordCount: item.wordCount ?? item.words?.length ?? 0,
       savedAt: item.savedAt,
       updatedAt: item.updatedAt,
+      savedToVocabulary: item.savedToVocabulary ?? false,
     };
   }
 }

@@ -444,6 +444,139 @@ function BatchSaveBar({ validBlocks, onSaved }: { validBlocks: JSONBlock[]; onSa
 
 type VocabFilter = 'all' | 'inVocab' | 'notInVocab';
 
+// ── BatchVocabBar ─────────────────────────────────────────────────────────────
+// Sends POST /vocabulary/from-family/{familyId} for each family not yet saved,
+// one at a time, with a live progress bar.
+
+interface BatchVocabProgress {
+  current: number;
+  total: number;
+  failed: string[];
+}
+
+function BatchVocabBar({
+  pendingFamilies,
+  onDone,
+}: {
+  pendingFamilies: WordFamilyEntity[];
+  onDone: () => void;
+}) {
+  const [progress,  setProgress]  = useState<BatchVocabProgress | null>(null);
+  const [done,      setDone]      = useState(false);
+  const [showBar,   setShowBar]   = useState(false);
+  const saveToVocab = useSaveFamilyToVocab();
+
+  if (pendingFamilies.length === 0) return null;
+
+  async function handleRun() {
+    setShowBar(true);
+    setDone(false);
+    const failed: string[] = [];
+    setProgress({ current: 0, total: pendingFamilies.length, failed: [] });
+
+    for (let i = 0; i < pendingFamilies.length; i++) {
+      try {
+        await saveToVocab.mutateAsync(pendingFamilies[i].familyId);
+      } catch (err) {
+        failed.push(pendingFamilies[i].title);
+      }
+      setProgress({ current: i + 1, total: pendingFamilies.length, failed: [...failed] });
+    }
+
+    setDone(true);
+    if (failed.length === 0) onDone();
+  }
+
+  function handleReset() { setProgress(null); setDone(false); setShowBar(false); }
+
+  const pct        = progress ? Math.round((progress.current / progress.total) * 100) : 0;
+  const isPending  = progress !== null && !done;
+  const allSuccess = done && progress && progress.failed.length === 0;
+  const hasFailed  = done && progress && progress.failed.length > 0;
+
+  return (
+    <div style={{
+      border: `1.5px solid ${allSuccess ? '#9FE1CB' : hasFailed ? '#F5C4B3' : '#c7d2fe'}`,
+      borderRadius: 10, padding: '12px 16px', marginBottom: 12,
+      background: allSuccess ? '#F4FCF8' : hasFailed ? '#FDF5F3' : '#f5f3ff',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#6366f1', fontFamily: 'monospace' }}>
+            {pendingFamilies.length} famil{pendingFamilies.length > 1 ? 'ies' : 'y'} not in vocabulary
+          </span>
+          {isPending && (
+            <span style={{ fontSize: 11, color: '#6366f1' }}>
+              {progress!.current} / {progress!.total} done
+            </span>
+          )}
+        </div>
+
+        {allSuccess ? (
+          <span style={{ fontSize: 12, padding: '4px 14px', borderRadius: 999, background: '#E1F5EE', color: '#0F6E56', fontWeight: 700 }}>
+            ✓ All saved to Vocabulary
+          </span>
+        ) : isPending ? (
+          <span style={{ fontSize: 12, color: '#6366f1', fontWeight: 600 }}>Saving…</span>
+        ) : (
+          <div style={{ display: 'flex', gap: 8 }}>
+            {showBar && hasFailed && (
+              <button onClick={handleReset} style={{ fontSize: 12, padding: '6px 14px', borderRadius: 8, background: 'transparent', color: '#888', border: '1.5px solid #e0e0e0', cursor: 'pointer' }}>
+                Reset
+              </button>
+            )}
+            {!showBar && (
+              <button
+                onClick={handleRun}
+                style={{ fontSize: 12, padding: '6px 18px', borderRadius: 8, background: '#6366f1', color: '#fff', border: 'none', fontWeight: 700, cursor: 'pointer' }}
+              >
+                🔤 Save all {pendingFamilies.length} to Vocabulary
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Progress bar */}
+      {showBar && progress && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ height: 6, borderRadius: 999, background: '#e0e7ff', overflow: 'hidden' }}>
+            <div style={{
+              height: '100%', borderRadius: 999,
+              width: `${pct}%`,
+              background: hasFailed ? '#854F0B' : '#6366f1',
+              transition: 'width 0.2s ease',
+            }} />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
+            <span style={{ fontSize: 11, color: '#818cf8' }}>
+              {isPending
+                ? `Saving "${pendingFamilies[progress.current]?.title ?? '…'}"…`
+                : done ? (allSuccess ? 'Complete' : `${progress.failed.length} failed`) : ''}
+            </span>
+            <span style={{ fontSize: 11, fontWeight: 600, color: '#6366f1', fontFamily: 'monospace' }}>
+              {pct}%
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Failed list */}
+      {hasFailed && progress && (
+        <div style={{ marginTop: 8 }}>
+          {progress.failed.map((title, i) => (
+            <div key={i} style={{ fontSize: 11, color: '#993C1D', background: '#FAECE7', padding: '4px 10px', borderRadius: 6, marginBottom: 4, fontFamily: 'monospace' }}>
+              ✗ Failed: {title}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── FamilyCard ────────────────────────────────────────────────────────────────
+
 function FamilyCard({
   entry, isExpanded, isConfirming,
   onToggle, onConfirm, onCancelConfirm, onDelete,
@@ -461,7 +594,6 @@ function FamilyCard({
 
   return (
     <div style={{ border: '1px solid #d5e8d4', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', background: '#F4FCF8', gap: 10, flexWrap: 'wrap' }}>
         <span onClick={onToggle} style={{ fontSize: 13, fontWeight: 700, color: '#1a1a1a', fontFamily: 'monospace', cursor: 'pointer', flex: '0 0 auto' }}>
           {entry.title}
@@ -484,22 +616,23 @@ function FamilyCard({
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           <span style={{ fontSize: 11, color: '#bbb' }}>{date}</span>
 
-          {/* Save to Vocabulary button */}
-          {!entry.savedToVocabulary ? (
+          {/* Individual save-to-vocab button */}
+          {!entry.savedToVocabulary && (
             <button
               onClick={() => saveToVocab.mutate(entry.familyId)}
               disabled={saveToVocab.isPending}
-              title="Save all words in this family to Vocabulary"
+              title="Save to Vocabulary"
               style={{
                 fontSize: 11, padding: '3px 9px', borderRadius: 6, fontWeight: 600,
                 background: saveToVocab.isPending ? '#f5f5f5' : '#eef2ff',
                 color: saveToVocab.isPending ? '#aaa' : '#6366f1',
-                border: '1px solid #c7d2fe', cursor: saveToVocab.isPending ? 'not-allowed' : 'pointer',
+                border: '1px solid #c7d2fe',
+                cursor: saveToVocab.isPending ? 'not-allowed' : 'pointer',
               }}
             >
               {saveToVocab.isPending ? '…' : '🔤'}
             </button>
-          ) : null}
+          )}
 
           {/* Delete */}
           {!isConfirming ? (
@@ -517,7 +650,6 @@ function FamilyCard({
         </div>
       </div>
 
-      {/* Expanded words */}
       {isExpanded && (
         <div style={{ padding: '12px 14px', borderTop: '1px solid #e8f5e8' }}>
           {entry.notes && (
@@ -541,20 +673,29 @@ function FamilyCard({
   );
 }
 
-function SavedFamiliesPanel() {
-  const { data, isLoading, isError, isFetchingNextPage, hasNextPage, fetchNextPage } = useInfiniteWordFamilies();
-  const deleteFamily  = useDeleteWordFamily();
-  const [expandedId, setExpandedId]   = useState<string | null>(null);
-  const [confirmId,  setConfirmId]    = useState<string | null>(null);
-  const [vocabFilter, setVocabFilter] = useState<VocabFilter>('all');
+// ── SavedFamiliesPanel ────────────────────────────────────────────────────────
 
-  if (isLoading) return <div style={{ fontSize: 13, color: '#aaa', padding: '20px 0', textAlign: 'center' }}>Loading saved families…</div>;
-  if (isError)   return <div style={{ fontSize: 13, color: '#993C1D', padding: '20px 0' }}>Failed to load saved families.</div>;
+function SavedFamiliesPanel() {
+  const { data, isLoading, isError, isFetchingNextPage, hasNextPage, fetchNextPage } =
+    useInfiniteWordFamilies();
+  const deleteFamily  = useDeleteWordFamily();
+  const [expandedId,   setExpandedId]   = useState<string | null>(null);
+  const [confirmId,    setConfirmId]    = useState<string | null>(null);
+  const [vocabFilter,  setVocabFilter]  = useState<VocabFilter>('all');
+
+  if (isLoading) return (
+    <div style={{ fontSize: 13, color: '#aaa', padding: '20px 0', textAlign: 'center' }}>Loading saved families…</div>
+  );
+  if (isError) return (
+    <div style={{ fontSize: 13, color: '#993C1D', padding: '20px 0' }}>Failed to load saved families.</div>
+  );
 
   const allItems: WordFamilyEntity[] = data?.pages.flatMap(p => p.data) ?? [];
-  const inVocab    = allItems.filter(e => e.savedToVocabulary);
+  const inVocab    = allItems.filter(e =>  e.savedToVocabulary);
   const notInVocab = allItems.filter(e => !e.savedToVocabulary);
-  const items      = vocabFilter === 'all' ? allItems : vocabFilter === 'inVocab' ? inVocab : notInVocab;
+  const displayed  = vocabFilter === 'all' ? allItems
+    : vocabFilter === 'inVocab'    ? inVocab
+    : notInVocab;
 
   if (allItems.length === 0) return (
     <div style={{ textAlign: 'center', padding: '28px', border: '2px dashed #eee', borderRadius: 10, color: '#aaa', fontSize: 13 }}>
@@ -565,8 +706,16 @@ function SavedFamiliesPanel() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
 
-      {/* Stats + filter bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+      {/* Batch-to-vocab bar — shown when families not yet in vocabulary exist */}
+      {notInVocab.length > 0 && (
+        <BatchVocabBar
+          pendingFamilies={notInVocab}
+          onDone={() => setVocabFilter('inVocab')}
+        />
+      )}
+
+      {/* Filter pills */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         {([
           { key: 'all',        label: `All (${allItems.length})` },
           { key: 'inVocab',    label: `🔤 In Vocabulary (${inVocab.length})` },
@@ -576,29 +725,27 @@ function SavedFamiliesPanel() {
             key={f.key}
             onClick={() => setVocabFilter(f.key)}
             style={{
-              fontSize: 12, padding: '5px 13px', borderRadius: 999, border: '1.5px solid',
+              fontSize: 12, padding: '5px 13px', borderRadius: 999,
+              border: '1.5px solid',
               borderColor: vocabFilter === f.key ? '#1a1a1a' : '#e0e0e0',
               background:  vocabFilter === f.key ? '#1a1a1a' : 'transparent',
-              color:       vocabFilter === f.key ? '#fff' : '#888',
+              color:       vocabFilter === f.key ? '#fff'    : '#888',
               cursor: 'pointer', fontWeight: vocabFilter === f.key ? 600 : 400,
             }}
           >
             {f.label}
           </button>
         ))}
-        <span style={{ marginLeft: 'auto', fontSize: 11, color: '#bbb' }}>
-          Click 🔤 on a card to save its words to Vocabulary
-        </span>
       </div>
 
-      {items.length === 0 && (
+      {displayed.length === 0 && (
         <div style={{ fontSize: 13, color: '#aaa', padding: '16px 0', textAlign: 'center' }}>
           No families match this filter.
         </div>
       )}
 
-      {/* Family cards */}
-      {items.map(entry => (
+      {/* Cards */}
+      {displayed.map(entry => (
         <FamilyCard
           key={entry.familyId}
           entry={entry}
