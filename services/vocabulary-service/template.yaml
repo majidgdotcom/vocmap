@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Vocabulary Service — saves validated word-family JSON to DynamoDB
+Description: Vocabulary Service — word families + vocabulary entries
 
 Parameters:
   Environment:
@@ -15,7 +15,7 @@ Globals:
   Function:
     Runtime: nodejs20.x
     MemorySize: 256
-    Timeout: 15          # batch writes may take slightly longer than simple ops
+    Timeout: 15
     CodeUri: ../../
     Environment:
       Variables:
@@ -42,7 +42,8 @@ Resources:
             UserPoolArn: !Ref CognitoUserPoolArn
         AddDefaultAuthorizerToCorsPreflight: false
 
-  # ── POST /word-families/batch ─────────────────────────────────────────────
+  # ══ Word-Family routes (existing) ════════════════════════════════════════════
+
   BatchSaveFamiliesFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -65,11 +66,8 @@ Resources:
         Minify: false
         TreeShaking: true
         Target: es2020
-        External:
-          - '@aws-sdk/client-dynamodb'
-          - '@aws-sdk/lib-dynamodb'
+        External: ['@aws-sdk/client-dynamodb', '@aws-sdk/lib-dynamodb']
 
-  # ── GET /word-families ────────────────────────────────────────────────────
   GetFamiliesFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -92,11 +90,8 @@ Resources:
         Minify: false
         TreeShaking: true
         Target: es2020
-        External:
-          - '@aws-sdk/client-dynamodb'
-          - '@aws-sdk/lib-dynamodb'
+        External: ['@aws-sdk/client-dynamodb', '@aws-sdk/lib-dynamodb']
 
-  # ── DELETE /word-families/{familyId} ──────────────────────────────────────
   DeleteFamilyFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -119,9 +114,82 @@ Resources:
         Minify: false
         TreeShaking: true
         Target: es2020
-        External:
-          - '@aws-sdk/client-dynamodb'
-          - '@aws-sdk/lib-dynamodb'
+        External: ['@aws-sdk/client-dynamodb', '@aws-sdk/lib-dynamodb']
+
+  # ══ Vocabulary routes (new) ══════════════════════════════════════════════════
+
+  SaveFamilyToVocabFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: services/vocabulary-service/src/handlers/save-family-to-vocab.handler
+      Timeout: 30   # upsert loop can be slow for large families
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DynamoTableName
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VocabularyApi
+            Path: /vocabulary/from-family/{familyId}
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints: [services/vocabulary-service/src/handlers/save-family-to-vocab.ts]
+        Bundle: true
+        Minify: false
+        TreeShaking: true
+        Target: es2020
+        External: ['@aws-sdk/client-dynamodb', '@aws-sdk/lib-dynamodb']
+
+  GetVocabularyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: services/vocabulary-service/src/handlers/get-vocabulary.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref DynamoTableName
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VocabularyApi
+            Path: /vocabulary
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints: [services/vocabulary-service/src/handlers/get-vocabulary.ts]
+        Bundle: true
+        Minify: false
+        TreeShaking: true
+        Target: es2020
+        External: ['@aws-sdk/client-dynamodb', '@aws-sdk/lib-dynamodb']
+
+  GetWordFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: services/vocabulary-service/src/handlers/get-word.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref DynamoTableName
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VocabularyApi
+            Path: /vocabulary/{wordKey}
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints: [services/vocabulary-service/src/handlers/get-word.ts]
+        Bundle: true
+        Minify: false
+        TreeShaking: true
+        Target: es2020
+        External: ['@aws-sdk/client-dynamodb', '@aws-sdk/lib-dynamodb']
 
 Outputs:
   VocabularyApiUrl:

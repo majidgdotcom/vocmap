@@ -5,6 +5,7 @@ import {
   useBatchSaveFamilies,
   useInfiniteWordFamilies,
   useDeleteWordFamily,
+  useSaveFamilyToVocab,
   WordFamilyEntity,
   SaveWordFamilyInput,
 } from '@/services/word-family.service';
@@ -441,20 +442,26 @@ function BatchSaveBar({ validBlocks, onSaved }: { validBlocks: JSONBlock[]; onSa
 
 // ─── SavedFamiliesPanel ───────────────────────────────────────────────────────
 
-function FamilyCard({ entry, isExpanded, isConfirming, onToggle, onConfirm, onCancelConfirm, onDelete }: {
+type VocabFilter = 'all' | 'inVocab' | 'notInVocab';
+
+function FamilyCard({
+  entry, isExpanded, isConfirming,
+  onToggle, onConfirm, onCancelConfirm, onDelete,
+}: {
   entry: WordFamilyEntity;
-  isExpanded: boolean;
-  isConfirming: boolean;
-  onToggle: () => void;
-  onConfirm: () => void;
-  onCancelConfirm: () => void;
-  onDelete: () => void;
+  isExpanded: boolean; isConfirming: boolean;
+  onToggle: () => void; onConfirm: () => void;
+  onCancelConfirm: () => void; onDelete: () => void;
 }) {
+  const saveToVocab = useSaveFamilyToVocab();
   const date = new Date(entry.savedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  const cats = entry.words.reduce<Record<string, number>>((acc, w) => { const c = getCategory(w.type); acc[c] = (acc[c] ?? 0) + 1; return acc; }, {});
+  const cats = entry.words.reduce<Record<string, number>>((acc, w) => {
+    const c = getCategory(w.type); acc[c] = (acc[c] ?? 0) + 1; return acc;
+  }, {});
 
   return (
     <div style={{ border: '1px solid #d5e8d4', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', background: '#F4FCF8', gap: 10, flexWrap: 'wrap' }}>
         <span onClick={onToggle} style={{ fontSize: 13, fontWeight: 700, color: '#1a1a1a', fontFamily: 'monospace', cursor: 'pointer', flex: '0 0 auto' }}>
           {entry.title}
@@ -469,8 +476,32 @@ function FamilyCard({ entry, isExpanded, isConfirming, onToggle, onConfirm, onCa
             {tag}
           </span>
         ))}
+        {entry.savedToVocabulary && (
+          <span style={{ fontSize: 10, padding: '2px 9px', borderRadius: 999, background: '#EAF3DE', color: '#3B6D11', fontWeight: 600 }}>
+            🔤 in vocabulary
+          </span>
+        )}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           <span style={{ fontSize: 11, color: '#bbb' }}>{date}</span>
+
+          {/* Save to Vocabulary button */}
+          {!entry.savedToVocabulary ? (
+            <button
+              onClick={() => saveToVocab.mutate(entry.familyId)}
+              disabled={saveToVocab.isPending}
+              title="Save all words in this family to Vocabulary"
+              style={{
+                fontSize: 11, padding: '3px 9px', borderRadius: 6, fontWeight: 600,
+                background: saveToVocab.isPending ? '#f5f5f5' : '#eef2ff',
+                color: saveToVocab.isPending ? '#aaa' : '#6366f1',
+                border: '1px solid #c7d2fe', cursor: saveToVocab.isPending ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {saveToVocab.isPending ? '…' : '🔤'}
+            </button>
+          ) : null}
+
+          {/* Delete */}
           {!isConfirming ? (
             <button onClick={onConfirm} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 6, background: 'transparent', color: '#ccc', border: '1px solid #e8e8e8', cursor: 'pointer' }}>✕</button>
           ) : (
@@ -485,6 +516,8 @@ function FamilyCard({ entry, isExpanded, isConfirming, onToggle, onConfirm, onCa
           </button>
         </div>
       </div>
+
+      {/* Expanded words */}
       {isExpanded && (
         <div style={{ padding: '12px 14px', borderTop: '1px solid #e8f5e8' }}>
           {entry.notes && (
@@ -509,32 +542,21 @@ function FamilyCard({ entry, isExpanded, isConfirming, onToggle, onConfirm, onCa
 }
 
 function SavedFamiliesPanel() {
-  const {
-    data,
-    isLoading,
-    isError,
-    isFetchingNextPage,
-    hasNextPage,
-    fetchNextPage,
-  } = useInfiniteWordFamilies();
-
+  const { data, isLoading, isError, isFetchingNextPage, hasNextPage, fetchNextPage } = useInfiniteWordFamilies();
   const deleteFamily  = useDeleteWordFamily();
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [confirmId,  setConfirmId]  = useState<string | null>(null);
+  const [expandedId, setExpandedId]   = useState<string | null>(null);
+  const [confirmId,  setConfirmId]    = useState<string | null>(null);
+  const [vocabFilter, setVocabFilter] = useState<VocabFilter>('all');
 
-  if (isLoading) return (
-    <div style={{ fontSize: 13, color: '#aaa', padding: '20px 0', textAlign: 'center' }}>Loading saved families…</div>
-  );
-  if (isError) return (
-    <div style={{ fontSize: 13, color: '#993C1D', padding: '20px 0' }}>Failed to load saved families.</div>
-  );
+  if (isLoading) return <div style={{ fontSize: 13, color: '#aaa', padding: '20px 0', textAlign: 'center' }}>Loading saved families…</div>;
+  if (isError)   return <div style={{ fontSize: 13, color: '#993C1D', padding: '20px 0' }}>Failed to load saved families.</div>;
 
-  // Flatten all pages into one list
-  const items: WordFamilyEntity[] = data?.pages.flatMap(p => p.data) ?? [];
-  const totalLoaded = items.length;
-  const totalOnServer = data?.pages[0]?.count ?? 0; // first page carries the full count if backend provides it
+  const allItems: WordFamilyEntity[] = data?.pages.flatMap(p => p.data) ?? [];
+  const inVocab    = allItems.filter(e => e.savedToVocabulary);
+  const notInVocab = allItems.filter(e => !e.savedToVocabulary);
+  const items      = vocabFilter === 'all' ? allItems : vocabFilter === 'inVocab' ? inVocab : notInVocab;
 
-  if (items.length === 0) return (
+  if (allItems.length === 0) return (
     <div style={{ textAlign: 'center', padding: '28px', border: '2px dashed #eee', borderRadius: 10, color: '#aaa', fontSize: 13 }}>
       No word families saved yet. Analyze text above and save valid blocks.
     </div>
@@ -543,14 +565,37 @@ function SavedFamiliesPanel() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
 
-      {/* Stats bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 12, color: '#888' }}>
-          Showing <strong style={{ color: '#1a1a1a' }}>{totalLoaded}</strong> families
-          {hasNextPage && <span style={{ color: '#aaa' }}> — more available</span>}
-          {!hasNextPage && <span style={{ color: '#0F6E56' }}> — all loaded</span>}
+      {/* Stats + filter bar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+        {([
+          { key: 'all',        label: `All (${allItems.length})` },
+          { key: 'inVocab',    label: `🔤 In Vocabulary (${inVocab.length})` },
+          { key: 'notInVocab', label: `Not saved (${notInVocab.length})` },
+        ] as { key: VocabFilter; label: string }[]).map(f => (
+          <button
+            key={f.key}
+            onClick={() => setVocabFilter(f.key)}
+            style={{
+              fontSize: 12, padding: '5px 13px', borderRadius: 999, border: '1.5px solid',
+              borderColor: vocabFilter === f.key ? '#1a1a1a' : '#e0e0e0',
+              background:  vocabFilter === f.key ? '#1a1a1a' : 'transparent',
+              color:       vocabFilter === f.key ? '#fff' : '#888',
+              cursor: 'pointer', fontWeight: vocabFilter === f.key ? 600 : 400,
+            }}
+          >
+            {f.label}
+          </button>
+        ))}
+        <span style={{ marginLeft: 'auto', fontSize: 11, color: '#bbb' }}>
+          Click 🔤 on a card to save its words to Vocabulary
         </span>
       </div>
+
+      {items.length === 0 && (
+        <div style={{ fontSize: 13, color: '#aaa', padding: '16px 0', textAlign: 'center' }}>
+          No families match this filter.
+        </div>
+      )}
 
       {/* Family cards */}
       {items.map(entry => (
@@ -576,19 +621,15 @@ function SavedFamiliesPanel() {
             border: '1.5px dashed #c7d2fe', background: isFetchingNextPage ? '#f5f5f5' : '#fff',
             color: isFetchingNextPage ? '#aaa' : '#6366f1',
             fontSize: 13, fontWeight: 600, cursor: isFetchingNextPage ? 'not-allowed' : 'pointer',
-            transition: 'background 0.15s',
           }}
         >
-          {isFetchingNextPage
-            ? 'Loading…'
-            : `Load next 50 →`}
+          {isFetchingNextPage ? 'Loading…' : 'Load next 50 →'}
         </button>
       )}
 
-      {/* End of list marker */}
-      {!hasNextPage && items.length > 50 && (
+      {!hasNextPage && allItems.length > 50 && (
         <div style={{ textAlign: 'center', fontSize: 11, color: '#bbb', padding: '10px 0' }}>
-          All {totalLoaded} families loaded
+          All {allItems.length} families loaded
         </div>
       )}
     </div>

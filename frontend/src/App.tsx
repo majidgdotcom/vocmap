@@ -10,22 +10,17 @@ import { ProtectedRoute } from '@/components/common/ProtectedRoute';
 import { LoginPage } from '@/pages/LoginPage';
 import { TodosPage } from '@/pages/TodosPage';
 import { WordFamilyPage } from '@/pages/WordFamilyPage';
+import { VocabularyPage } from '@/pages/VocabularyPage';
 
-// Boot Amplify / Cognito once at module level
 configureAmplify();
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30 * 1000,       // 30 s
-      gcTime: 5 * 60 * 1000,      // 5 min
+      staleTime: 30 * 1000,
+      gcTime: 5 * 60 * 1000,
       retry: 1,
       refetchOnWindowFocus: true,
-    },
-    mutations: {
-      onError: (err) => {
-        console.error('Mutation error:', err);
-      },
     },
   },
 });
@@ -36,26 +31,12 @@ const App: React.FC = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <TodosPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/word-families"
-            element={
-              <ProtectedRoute>
-                <WordFamilyPage />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/" element={<ProtectedRoute><TodosPage /></ProtectedRoute>} />
+          <Route path="/word-families" element={<ProtectedRoute><WordFamilyPage /></ProtectedRoute>} />
+          <Route path="/vocabulary" element={<ProtectedRoute><VocabularyPage /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
-
       {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
     </QueryClientProvider>
   </ReduxProvider>

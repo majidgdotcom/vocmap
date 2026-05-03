@@ -31,10 +31,9 @@ export interface WordFamilyEntity {
   wordCount: number;
   savedAt: string;
   updatedAt: string;
+  savedToVocabulary?: boolean;  // set by backend after POST /vocabulary/from-family
 }
 
-// Full envelope the Lambda returns:
-// { success: true, data: WordFamilyEntity[], count: number, lastKey?: string }
 interface FamiliesEnvelope {
   success: boolean;
   data: WordFamilyEntity[];
@@ -83,6 +82,24 @@ export function useDeleteWordFamily() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (familyId: string) => vocabApi.delete(`/word-families/${familyId}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: wordFamilyKeys.lists() }),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: wordFamilyKeys.lists() }),
+  });
+}
+
+/**
+ * POST /vocabulary/from-family/{familyId}
+ * Transforms a saved word family into vocabulary entries (upsert + merge).
+ * On success invalidates BOTH families list (to refresh savedToVocabulary flag)
+ * and vocabulary list.
+ */
+export function useSaveFamilyToVocab() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (familyId: string) =>
+      vocabApi.post(`/vocabulary/from-family/${familyId}`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: wordFamilyKeys.lists() });
+      qc.invalidateQueries({ queryKey: ['vocabulary'] });
+    },
   });
 }
