@@ -1,5 +1,5 @@
 {
-  "name": "@vocmap/vocabulary-service",
+  "name": "@vocmap/word-family-service",
   "version": "1.0.0",
   "private": true,
   "scripts": {

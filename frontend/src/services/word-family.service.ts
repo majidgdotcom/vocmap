@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { vocabApi, vocabApiRaw } from '@/config/api-client';
+import { wordFamilyApi, wordFamilyApiRaw, vocabApi } from '@/config/api-client';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -50,7 +50,7 @@ export const wordFamilyKeys = {
   list:  (tag?: string) => [...wordFamilyKeys.lists(), { tag }] as const,
 };
 
-// ── Infinite query ────────────────────────────────────────────────────────────
+// ── Infinite query (word-family-service) ──────────────────────────────────────
 
 const PAGE_SIZE = 50;
 
@@ -61,7 +61,7 @@ export function useInfiniteWordFamilies(tag?: string) {
       const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
       if (tag) params.set('tag', tag);
       if (typeof pageParam === 'string') params.set('lastKey', pageParam);
-      return vocabApiRaw.get<FamiliesEnvelope>(`/word-families?${params}`);
+      return wordFamilyApiRaw.get<FamiliesEnvelope>(`/word-families?${params}`);
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.lastKey ?? undefined,
@@ -70,23 +70,31 @@ export function useInfiniteWordFamilies(tag?: string) {
 
 // ── Mutations ─────────────────────────────────────────────────────────────────
 
+/** POST /word-families/batch → word-family-service */
 export function useBatchSaveFamilies() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: BatchSaveFamiliesInput) =>
-      vocabApi.post<WordFamilyEntity[]>('/word-families/batch', input),
+      wordFamilyApi.post<WordFamilyEntity[]>('/word-families/batch', input),
     onSuccess: () => qc.invalidateQueries({ queryKey: wordFamilyKeys.lists() }),
   });
 }
 
+/** DELETE /word-families/{familyId} → word-family-service */
 export function useDeleteWordFamily() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (familyId: string) => vocabApi.delete(`/word-families/${familyId}`),
+    mutationFn: (familyId: string) =>
+      wordFamilyApi.delete(`/word-families/${familyId}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: wordFamilyKeys.lists() }),
   });
 }
 
+/**
+ * POST /vocabulary/from-family/{familyId} → vocabulary-service
+ * Reads the family from DynamoDB, upserts its words into vocabulary,
+ * and marks the family as savedToVocabulary = true.
+ */
 export function useSaveFamilyToVocab() {
   const qc = useQueryClient();
   return useMutation({

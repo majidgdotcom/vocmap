@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Vocabulary Service — upsert, list, and look up vocabulary entries
+Description: Word Family Service — batch save, list, delete word families
 
 Parameters:
   Environment:
@@ -15,7 +15,7 @@ Globals:
   Function:
     Runtime: nodejs20.x
     MemorySize: 256
-    Timeout: 30   # upsert loop across many words can be slow
+    Timeout: 15
     CodeUri: ../../
     Environment:
       Variables:
@@ -25,7 +25,7 @@ Globals:
 
 Resources:
 
-  VocabularyApi:
+  WordFamilyApi:
     Type: AWS::Serverless::Api
     Properties:
       StageName: !Ref Environment
@@ -41,11 +41,11 @@ Resources:
             UserPoolArn: !Ref CognitoUserPoolArn
         AddDefaultAuthorizerToCorsPreflight: false
 
-  # ── POST /vocabulary/from-family/{familyId} ───────────────────────────────
-  SaveFamilyToVocabFunction:
+  # ── POST /word-families/batch ─────────────────────────────────────────────
+  BatchSaveFamiliesFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: services/vocabulary-service/src/handlers/save-family-to-vocab.handler
+      Handler: services/word-family-service/src/handlers/batch-save-families.handler
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref DynamoTableName
@@ -53,25 +53,24 @@ Resources:
         Api:
           Type: Api
           Properties:
-            RestApiId: !Ref VocabularyApi
-            Path: /vocabulary/from-family/{familyId}
+            RestApiId: !Ref WordFamilyApi
+            Path: /word-families/batch
             Method: POST
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
-        EntryPoints: [services/vocabulary-service/src/handlers/save-family-to-vocab.ts]
+        EntryPoints: [services/word-family-service/src/handlers/batch-save-families.ts]
         Bundle: true
         Minify: false
         TreeShaking: true
         Target: es2020
         External: ['@aws-sdk/client-dynamodb', '@aws-sdk/lib-dynamodb']
 
-  # ── GET /vocabulary ───────────────────────────────────────────────────────
-  GetVocabularyFunction:
+  # ── GET /word-families ────────────────────────────────────────────────────
+  GetFamiliesFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: services/vocabulary-service/src/handlers/get-vocabulary.handler
-      Timeout: 15
+      Handler: services/word-family-service/src/handlers/get-families.handler
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref DynamoTableName
@@ -79,39 +78,38 @@ Resources:
         Api:
           Type: Api
           Properties:
-            RestApiId: !Ref VocabularyApi
-            Path: /vocabulary
+            RestApiId: !Ref WordFamilyApi
+            Path: /word-families
             Method: GET
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
-        EntryPoints: [services/vocabulary-service/src/handlers/get-vocabulary.ts]
+        EntryPoints: [services/word-family-service/src/handlers/get-families.ts]
         Bundle: true
         Minify: false
         TreeShaking: true
         Target: es2020
         External: ['@aws-sdk/client-dynamodb', '@aws-sdk/lib-dynamodb']
 
-  # ── GET /vocabulary/{wordKey} ─────────────────────────────────────────────
-  GetWordFunction:
+  # ── DELETE /word-families/{familyId} ──────────────────────────────────────
+  DeleteFamilyFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: services/vocabulary-service/src/handlers/get-word.handler
-      Timeout: 15
+      Handler: services/word-family-service/src/handlers/delete-family.handler
       Policies:
-        - DynamoDBReadPolicy:
+        - DynamoDBCrudPolicy:
             TableName: !Ref DynamoTableName
       Events:
         Api:
           Type: Api
           Properties:
-            RestApiId: !Ref VocabularyApi
-            Path: /vocabulary/{wordKey}
-            Method: GET
+            RestApiId: !Ref WordFamilyApi
+            Path: /word-families/{familyId}
+            Method: DELETE
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
-        EntryPoints: [services/vocabulary-service/src/handlers/get-word.ts]
+        EntryPoints: [services/word-family-service/src/handlers/delete-family.ts]
         Bundle: true
         Minify: false
         TreeShaking: true
@@ -119,7 +117,7 @@ Resources:
         External: ['@aws-sdk/client-dynamodb', '@aws-sdk/lib-dynamodb']
 
 Outputs:
-  VocabularyApiUrl:
-    Value: !Sub 'https://${VocabularyApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+  WordFamilyApiUrl:
+    Value: !Sub 'https://${WordFamilyApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
     Export:
-      Name: !Sub '${Environment}-VocabularyApiUrl'
+      Name: !Sub '${Environment}-WordFamilyApiUrl'
