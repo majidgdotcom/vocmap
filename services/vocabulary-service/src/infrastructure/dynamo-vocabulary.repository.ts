@@ -147,6 +147,7 @@ export class DynamoVocabularyRepository implements IVocabularyRepository {
       familyIds: item.familyIds ?? [],
       savedAt:   item.savedAt,
       updatedAt: item.updatedAt,
+      cambridge: item.cambridge,   // optional — present after enrichment
     };
   }
 }
