@@ -17,7 +17,6 @@ interface WordEntry {
   type: string;
   typeCode?: number | string;
   mean: string;
-  lang?: string; 
 }
 
 interface JSONBlock {
@@ -251,8 +250,10 @@ function BatchSaveBar({ validBlocks, onSaved }: { validBlocks: JSONBlock[]; onSa
   const [notes, setNotes]       = useState('');
   const [showForm, setShowForm] = useState(false);
   const [progress, setProgress] = useState<SaveProgress | null>(null);
+  const [phase, setPhase]       = useState<'families' | 'vocabulary'>('families');
   const [done, setDone]         = useState(false);
-  const saveBatch = useBatchSaveFamilies();
+  const saveBatch   = useBatchSaveFamilies();
+  const saveToVocab = useSaveFamilyToVocab();
 
   if (validBlocks.length === 0) return null;
 
@@ -282,12 +283,25 @@ function BatchSaveBar({ validBlocks, onSaved }: { validBlocks: JSONBlock[]; onSa
     let saved = 0;
 
     setDone(false);
+    setPhase('families');
     setProgress({ current: 0, total: chunks.length, saved: 0, failed: [] });
 
     for (let i = 0; i < chunks.length; i++) {
       try {
-        await saveBatch.mutateAsync({ families: chunks[i] });
+        // 1. Save chunk to word-families table
+        const savedFamilies = await saveBatch.mutateAsync({ families: chunks[i] });
         saved += chunks[i].length;
+
+        // 2. Immediately save each family in this chunk to vocabulary (parallel)
+        setPhase('vocabulary');
+        if (Array.isArray(savedFamilies) && savedFamilies.length > 0) {
+          await Promise.allSettled(
+            savedFamilies.map((f: { familyId: string }) =>
+              saveToVocab.mutateAsync(f.familyId)
+            )
+          );
+        }
+        setPhase('families');
       } catch (err) {
         failed.push(`Chunk ${i + 1}/${chunks.length}: ${(err as Error).message ?? 'failed'}`);
       }
@@ -362,7 +376,7 @@ function BatchSaveBar({ validBlocks, onSaved }: { validBlocks: JSONBlock[]; onSa
         <div style={{ marginTop: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
             <span style={{ fontSize: 11, color: '#5a7a9c' }}>
-              {isPending ? `Saving batch ${progress.current + 1} of ${progress.total}…` : done ? (allSuccess ? 'Complete' : `Done — ${progress.failed.length} batch${progress.failed.length > 1 ? 'es' : ''} failed`) : ''}
+              {isPending ? (phase === 'vocabulary' ? `Saving to Vocabulary (batch ${progress.current + 1}/${progress.total})…` : `Saving families batch ${progress.current + 1} of ${progress.total}…`) : done ? (allSuccess ? '✓ Saved to families + vocabulary' : `Done — ${progress.failed.length} batch${progress.failed.length > 1 ? 'es' : ''} failed`) : ''}
             </span>
             <span style={{ fontSize: 11, fontWeight: 600, color: '#185FA5', fontFamily: 'monospace' }}>
               {progress.saved} / {validBlocks.length} saved · {pct}%
@@ -434,7 +448,7 @@ function BatchSaveBar({ validBlocks, onSaved }: { validBlocks: JSONBlock[]; onSa
               onClick={handleSave}
               style={{ fontSize: 13, padding: '8px 24px', borderRadius: 8, background: '#185FA5', color: '#fff', border: 'none', fontWeight: 700, cursor: 'pointer' }}
             >
-              Save {validBlocks.length} families in {totalChunks} batches →
+              Save {validBlocks.length} families + vocabulary in {totalChunks} batches →
             </button>
           </div>
         </div>
