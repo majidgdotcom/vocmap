@@ -55,7 +55,7 @@ export function useWordFamilies(tag?: string) {
 
   return useQuery({
     queryKey: wordFamilyKeys.list(tag),
-    queryFn:  () => vocabApi.get<WordFamilyListResult>(`/word-families?${params}`),
+    queryFn:  () => vocabApi.get<WordFamilyEntity[]>(`/word-families?${params}`),
   });
 }
 

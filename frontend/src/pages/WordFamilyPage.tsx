@@ -450,7 +450,7 @@ function SavedFamiliesPanel() {
   if (isLoading) return <div style={{ fontSize: 13, color: '#aaa', padding: '20px 0' }}>Loading saved families…</div>;
   if (isError)   return <div style={{ fontSize: 13, color: '#993C1D', padding: '20px 0' }}>Failed to load saved families.</div>;
 
-  const items: WordFamilyEntity[] = data?.items ?? [];
+  const items: WordFamilyEntity[] = data ?? [];
   if (items.length === 0) return (
     <div style={{ textAlign: 'center', padding: '28px', border: '2px dashed #eee', borderRadius: 10, color: '#aaa', fontSize: 13 }}>
       No word families saved yet. Analyze text above and save valid blocks.
