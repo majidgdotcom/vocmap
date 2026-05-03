@@ -101,6 +101,9 @@ function VocabCard({
                   <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: CAT_BG[cat] ?? '#f5f5f5', color: CAT_COLOR[cat] ?? '#555', fontWeight: 500, flexShrink: 0 }}>
                     {m.type}
                   </span>
+                  <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 999, background: '#f3f4f6', color: '#6b7280', fontFamily: 'monospace', flexShrink: 0 }}>
+                    {m.lang ?? 'per'}
+                  </span>
                   <span style={{ fontSize: 13, color: '#374151', direction: 'rtl', flex: 1 }}>
                     {m.mean}
                   </span>

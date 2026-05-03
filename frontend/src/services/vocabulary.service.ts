@@ -5,6 +5,7 @@ import { vocabApiRaw } from '@/config/api-client';
 
 export interface VocabMeaning {
   type: string;
+  lang: string;   // "per", "en", "ar", "fr", …
   mean: string;
 }
 

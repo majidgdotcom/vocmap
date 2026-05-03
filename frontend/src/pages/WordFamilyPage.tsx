@@ -17,6 +17,7 @@ interface WordEntry {
   type: string;
   typeCode?: number | string;
   mean: string;
+  lang?: string; 
 }
 
 interface JSONBlock {
@@ -206,6 +207,7 @@ function BlockCard({ block, isSaved }: { block: JSONBlock; isSaved: boolean }) {
                   <span style={{ fontWeight: 700, fontSize: 13, minWidth: 120, fontFamily: 'monospace' }}>{entry.word}</span>
                   <TypeBadge type={entry.type} />
                   <span style={{ fontSize: 11, color: '#ccc', fontFamily: 'monospace' }}>code:{entry.typeCode}</span>
+                  <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 999, background: '#f3f4f6', color: '#6b7280', fontFamily: 'monospace' }}>{entry.lang ?? 'per'}</span>
                   <span style={{ fontSize: 12, color: '#666', flex: 1 }}>{entry.mean}</span>
                 </div>
               ))}
@@ -268,6 +270,7 @@ function BatchSaveBar({ validBlocks, onSaved }: { validBlocks: JSONBlock[]; onSa
           word: w.word,
           type: w.type,
           typeCode: typeof w.typeCode === 'number' ? w.typeCode : undefined,
+          lang: w.lang ?? 'per',
           mean: w.mean,
         })),
         tags: tagList,

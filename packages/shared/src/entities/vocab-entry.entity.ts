@@ -1,6 +1,7 @@
 export interface VocabMeaning {
-  type: string;   // e.g. "noun", "phrasal verb (past tense)"
-  mean: string;   // Persian translation
+  type: string;    // e.g. "noun", "phrasal verb (past tense)"
+  lang: string;    // ISO 639-2/3 code — "per", "en", "ar", "fr", …
+  mean: string;    // translation in that language
 }
 
 /**
@@ -10,13 +11,13 @@ export interface VocabMeaning {
  * "list"       → wordKey = "list"
  */
 export interface VocabEntry {
-  vocabId:   string;       // uuid — stable ID
-  wordKey:   string;       // normalised: lower-case, spaces→hyphens  e.g. "figure-out"
-  word:      string;       // display form                             e.g. "figure out"
+  vocabId:   string;
+  wordKey:   string;       // normalised: lower-case, spaces→hyphens
+  word:      string;       // display form
   userId:    string;
-  means:     VocabMeaning[];  // deduplicated by `type`
-  relations: string[];        // display words of related forms
-  familyIds: string[];        // which WordFamily records contributed
-  savedAt:   string;          // ISO 8601 — first save
-  updatedAt: string;          // ISO 8601 — last merge
+  means:     VocabMeaning[];  // deduplicated by type+lang pair
+  relations: string[];
+  familyIds: string[];
+  savedAt:   string;
+  updatedAt: string;
 }
