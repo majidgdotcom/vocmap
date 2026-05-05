@@ -828,7 +828,7 @@ export const WordFamilyPage: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#f9fafb' }}>
-      <TopBar onNewTodo={() => {}} />
+      <TopBar />
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px', maxWidth: 820, width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
 
