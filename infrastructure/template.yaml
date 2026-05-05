@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Shared Infrastructure - DynamoDB, Cognito, CloudWatch
+Description: VocMap - Shared Infrastructure (DynamoDB, Cognito, CloudWatch)
 
 Parameters:
   Environment:
@@ -10,7 +10,8 @@ Parameters:
 
 Resources:
 
-  TodoTable:
+  # ── DynamoDB single-table ────────────────────────────────────────────────────
+  VocMapTable:
     Type: AWS::DynamoDB::Table
     DeletionPolicy: Retain
     Properties:
@@ -45,6 +46,7 @@ Resources:
         AttributeName: ttl
         Enabled: true
 
+  # ── Cognito ──────────────────────────────────────────────────────────────────
   CognitoUserPool:
     Type: AWS::Cognito::UserPool
     Properties:
@@ -80,25 +82,26 @@ Resources:
       SupportedIdentityProviders:
         - COGNITO
 
-  TodoServiceLogGroup:
+  # ── CloudWatch Log Groups ────────────────────────────────────────────────────
+  WordFamilyServiceLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub '/aws/lambda/vocmap-todo-service-${Environment}'
+      LogGroupName: !Sub '/aws/lambda/vocmap-word-family-service-${Environment}'
       RetentionInDays: 30
 
-  KeywordServiceLogGroup:
+  VocabularyServiceLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub '/aws/lambda/vocmap-keyword-service-${Environment}'
+      LogGroupName: !Sub '/aws/lambda/vocmap-vocabulary-service-${Environment}'
       RetentionInDays: 30
 
 Outputs:
   DynamoTableName:
-    Value: !Ref TodoTable
+    Value: !Ref VocMapTable
     Export:
       Name: !Sub '${Environment}-DynamoTableName'
   DynamoTableArn:
-    Value: !GetAtt TodoTable.Arn
+    Value: !GetAtt VocMapTable.Arn
     Export:
       Name: !Sub '${Environment}-DynamoTableArn'
   CognitoUserPoolId:

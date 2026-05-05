@@ -9,7 +9,7 @@ Parameters:
 
 Resources:
 
-  TodoTable:
+  VocMapTable:
     Type: AWS::DynamoDB::Table
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
@@ -45,10 +45,10 @@ Resources:
 
 Outputs:
   DynamoTableName:
-    Value: !Ref TodoTable
+    Value: !Ref VocMapTable
     Export:
       Name: !Sub '${Environment}-DynamoTableName'
   DynamoTableArn:
-    Value: !GetAtt TodoTable.Arn
+    Value: !GetAtt VocMapTable.Arn
     Export:
       Name: !Sub '${Environment}-DynamoTableArn'
