@@ -28,7 +28,7 @@ echo "✓ User Pool created: $POOL_ID"
 # Create App Client
 CLIENT_ID=$(aws cognito-idp create-user-pool-client \
   --user-pool-id "$POOL_ID" \
-  --client-name "todo-app-web-${ENVIRONMENT}" \
+  --client-name "vocmap-web-${ENVIRONMENT}" \
   --no-generate-secret \
   --explicit-auth-flows ALLOW_USER_SRP_AUTH ALLOW_REFRESH_TOKEN_AUTH ALLOW_USER_PASSWORD_AUTH \
   --supported-identity-providers COGNITO \
