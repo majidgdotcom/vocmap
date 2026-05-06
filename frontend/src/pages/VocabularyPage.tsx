@@ -48,6 +48,7 @@ function CambridgePanel({ vm }: { vm: VocabularyViewModel }) {
   const enrich = useEnrichVocabEntry();
   const c = vm.cambridge;
 
+  // ── State 1: never checked ────────────────────────────────────────────────
   if (!c) {
     return (
       <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 8, background: '#f9fafb', border: '1px dashed #e5e7eb' }}>
@@ -66,6 +67,30 @@ function CambridgePanel({ vm }: { vm: VocabularyViewModel }) {
             ✗ {(enrich.error as Error)?.message ?? 'Enrichment failed'}
           </div>
         )}
+      </div>
+    );
+  }
+
+  // ── State 2: checked but not available in Cambridge ───────────────────────
+  if (c.notAvailable) {
+    return (
+      <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 8, background: '#fafafa', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, color: '#9ca3af' }}>🌐</span>
+          <span style={{ fontSize: 12, color: '#6b7280' }}>Not available in Cambridge</span>
+          {c.checkedDate && (
+            <span style={{ fontSize: 10, color: '#d1d5db' }}>checked {c.checkedDate}</span>
+          )}
+        </div>
+        {/* Allow manual re-check in case Cambridge adds it later */}
+        <button
+          onClick={() => enrich.mutate(vm.wordKey)}
+          disabled={enrich.isPending}
+          title="Re-check Cambridge"
+          style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, background: 'transparent', color: '#9ca3af', border: '1px solid #e5e7eb', cursor: enrich.isPending ? 'not-allowed' : 'pointer' }}
+        >
+          {enrich.isPending ? '…' : '↺ re-check'}
+        </button>
       </div>
     );
   }

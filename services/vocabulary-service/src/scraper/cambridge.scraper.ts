@@ -165,6 +165,14 @@ export async function scrapeCambridgeWord(word: string): Promise<ScrapedWord> {
     }
   });
 
+  // Cambridge returns 200 with a search/redirect page for words it doesn't have.
+  // Detect this by checking for a headword AND at least one definition.
+  // A page with no headword and no definitions is not a dictionary entry.
+  const hasEntry = $(`.${CLS.headword}`).length > 0 && definitions.length > 0;
+  if (!hasEntry) {
+    throw new WordNotAvailableError(word);
+  }
+
   return { word: wordTitle, usPhonetic, ukPhonetic, usAudio, ukAudio, definitions };
 }
 
@@ -175,5 +183,18 @@ export class WordNotFoundError extends Error {
   constructor(url: string) {
     super(`Cambridge: word not found at ${url}`);
     this.name = 'WordNotFoundError';
+  }
+}
+
+/**
+ * Thrown when Cambridge returns a page but has no dictionary entry for the word.
+ * e.g. technical terms, proper nouns, very rare words.
+ * Distinct from WordNotFoundError (HTTP 404) — here we got a 200 but no content.
+ */
+export class WordNotAvailableError extends Error {
+  readonly statusCode = 404;
+  constructor(word: string) {
+    super(`Not available in Cambridge: "${word}"`);
+    this.name = 'WordNotAvailableError';
   }
 }

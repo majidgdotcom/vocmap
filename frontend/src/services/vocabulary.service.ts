@@ -20,10 +20,12 @@ export interface CambridgeDefinition {
 }
 
 export interface CambridgeData {
-  phonetic: { us?: string; uk?: string };
-  audio:    { usKey?: string; ukKey?: string };
-  definitions: CambridgeDefinition[];
-  fetchedAt: string;
+  phonetic:      { us?: string; uk?: string };
+  audio:         { usKey?: string; ukKey?: string };
+  definitions:   CambridgeDefinition[];
+  fetchedAt:     string;
+  notAvailable?: boolean;   // true when Cambridge has no entry for this word
+  checkedAt?:    string;
 }
 
 export interface VocabEntry {

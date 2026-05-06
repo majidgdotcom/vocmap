@@ -40,12 +40,14 @@ export interface CambridgeDefinitionViewModel {
 }
 
 export interface CambridgeViewModel {
-  ukPhonetic?:  string;           // /prəˈvaɪd/
-  usPhonetic?:  string;
-  ukAudioKey?:  string;           // S3 key
-  usAudioKey?:  string;
-  definitions:  CambridgeDefinitionViewModel[];
-  fetchedDate:  string;           // "May 4, 2026"
+  ukPhonetic?:    string;           // /prəˈvaɪd/
+  usPhonetic?:    string;
+  ukAudioKey?:    string;           // S3 key
+  usAudioKey?:    string;
+  definitions:    CambridgeDefinitionViewModel[];
+  fetchedDate:    string;           // "May 4, 2026"
+  notAvailable:   boolean;          // true when Cambridge has no entry
+  checkedDate?:   string;           // when notAvailable was last confirmed
 }
 
 // ── Factory ───────────────────────────────────────────────────────────────────
@@ -77,16 +79,18 @@ function toMeaningViewModel(m: VocabMeaning): MeaningViewModel {
 function toCambridgeViewModel(c: VocabEntry['cambridge']): CambridgeViewModel {
   if (!c) throw new Error('cambridge data is required');
   return {
-    ukPhonetic:  c.phonetic.uk,
-    usPhonetic:  c.phonetic.us,
-    ukAudioKey:  c.audio.ukKey,
-    usAudioKey:  c.audio.usKey,
-    definitions: (c.definitions ?? []).map((def: CambridgeDefinition) => ({
+    ukPhonetic:   c.phonetic?.uk,
+    usPhonetic:   c.phonetic?.us,
+    ukAudioKey:   c.audio?.ukKey,
+    usAudioKey:   c.audio?.usKey,
+    definitions:  (c.definitions ?? []).map((def: CambridgeDefinition) => ({
       wordType:  def.wordType,
       category:  getCategory(def.wordType),
       means:     def.means,
     })),
-    fetchedDate: formatDate(c.fetchedAt),
+    fetchedDate:  c.fetchedAt ? formatDate(c.fetchedAt) : '',
+    notAvailable: c.notAvailable ?? false,
+    checkedDate:  c.checkedAt ? formatDate(c.checkedAt) : undefined,
   };
 }
 

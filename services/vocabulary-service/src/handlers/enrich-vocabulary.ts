@@ -15,7 +15,7 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 import { Keys, normalizeWordKey } from '@vocmap/shared';
 
-import { scrapeCambridgeWord, WordNotFoundError } from '../scraper/cambridge.scraper';
+import { scrapeCambridgeWord, WordNotFoundError, WordNotAvailableError } from '../scraper/cambridge.scraper';
 import { getUserId, response, withErrorHandling } from './vocab-base';
 
 const dynamo  = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -52,11 +52,22 @@ export const handler = withErrorHandling(async (event: APIGatewayProxyEvent) => 
   try {
     scraped = await scrapeCambridgeWord(displayWord);
   } catch (err) {
-    if (err instanceof WordNotFoundError) {
+    if (err instanceof WordNotFoundError || err instanceof WordNotAvailableError) {
+      // Store notAvailable flag so the frontend stops showing the enrich button
+      await dynamo.send(new UpdateCommand({
+        TableName: TABLE,
+        Key: { PK: Keys.vocab.pk(userId), SK: Keys.vocab.sk(wordKey) },
+        UpdateExpression: 'SET cambridge = :c, updatedAt = :now',
+        ConditionExpression: 'attribute_exists(PK)',
+        ExpressionAttributeValues: {
+          ':c':   { notAvailable: true, checkedAt: new Date().toISOString() },
+          ':now': new Date().toISOString(),
+        },
+      }));
       return response(404, {
         success: false,
-        error: `Cambridge has no entry for "${displayWord}"`,
-        code: 'CAMBRIDGE_NOT_FOUND',
+        error: `Not available in Cambridge: "${displayWord}"`,
+        code: 'CAMBRIDGE_NOT_AVAILABLE',
       });
     }
     throw err;
