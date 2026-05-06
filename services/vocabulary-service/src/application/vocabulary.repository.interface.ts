@@ -7,20 +7,15 @@ export interface PaginatedVocab {
 }
 
 export interface IVocabularyRepository {
-  /** Get a single word by its key (returns null if not found). */
-  findByWordKey(userId: string, wordKey: string): Promise<VocabEntry | null>;
+  /** Get a single word by its key. */
+  findByWordKey(wordKey: string): Promise<VocabEntry | null>;
 
-  /**
-   * Upsert many entries:
-   *  - If entry does not exist → create
-   *  - If entry exists         → merge (means dedup by type, relations set-union)
-   * Returns the final persisted entries.
-   */
+  /** Upsert many — create new or merge into existing. */
   upsertMany(entries: VocabEntry[]): Promise<VocabEntry[]>;
 
-  /** Paginated alphabetical list. */
-  findByUser(userId: string, query: GetVocabQuery): Promise<PaginatedVocab>;
+  /** Paginated alphabetical list (public). */
+  list(query: GetVocabQuery): Promise<PaginatedVocab>;
 
-  /** Hard delete a single word entry. */
-  delete(userId: string, wordKey: string): Promise<void>;
+  /** Hard delete. */
+  delete(wordKey: string): Promise<void>;
 }

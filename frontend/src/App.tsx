@@ -4,12 +4,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 
 import { configureAmplify } from '@/config/amplify';
-import { ProtectedRoute } from '@/components/common/ProtectedRoute';
-import { LoginPage }           from '@/pages/LoginPage';
-import { WordFamilyPage }      from '@/pages/WordFamilyPage';
-import { VocabularyPage }      from '@/pages/VocabularyPage';
-import { UserDashboardPage }   from '@/pages/UserDashboardPage';
-import { UnauthorizedPage }    from '@/pages/UnauthorizedPage';
+import { ProtectedRoute }       from '@/components/common/ProtectedRoute';
+import { PublicSearchPage }     from '@/pages/PublicSearchPage';
+import { LoginPage }            from '@/pages/LoginPage';
+import { WordFamilyPage }       from '@/pages/WordFamilyPage';
+import { VocabularyPage }       from '@/pages/VocabularyPage';
+import { UnauthorizedPage }     from '@/pages/UnauthorizedPage';
+import { UserDashboardPage }    from '@/pages/UserDashboardPage';
 
 configureAmplify();
 
@@ -31,40 +32,28 @@ const App: React.FC = () => (
   <QueryClientProvider client={queryClient}>
     <BrowserRouter>
       <Routes>
-        {/* Public */}
+        {/* ── Public ── */}
+        <Route path="/"             element={<PublicSearchPage />} />
         <Route path="/login"        element={<LoginPage />} />
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
-        {/* Admin-only routes */}
+        {/* ── Admin-only ── */}
         <Route
           path="/word-families"
-          element={
-            <ProtectedRoute adminOnly>
-              <WordFamilyPage />
-            </ProtectedRoute>
-          }
+          element={<ProtectedRoute adminOnly><WordFamilyPage /></ProtectedRoute>}
         />
         <Route
           path="/vocabulary"
-          element={
-            <ProtectedRoute adminOnly>
-              <VocabularyPage />
-            </ProtectedRoute>
-          }
+          element={<ProtectedRoute adminOnly><VocabularyPage /></ProtectedRoute>}
         />
 
-        {/* User routes (future — currently placeholder) */}
+        {/* ── Regular user (future) ── */}
         <Route
           path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <UserDashboardPage />
-            </ProtectedRoute>
-          }
+          element={<ProtectedRoute><UserDashboardPage /></ProtectedRoute>}
         />
 
-        {/* Default: admins land on /word-families, others on /dashboard */}
-        <Route path="*" element={<Navigate to="/word-families" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
     {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}

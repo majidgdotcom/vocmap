@@ -16,23 +16,23 @@ const useCases  = new VocabularyUseCases(repo);
 /**
  * POST /vocabulary/from-family/{familyId}
  *
- * 1. Fetch the word family from DynamoDB.
- * 2. Transform each WordEntry → VocabEntry (group by word, build relations).
- * 3. Upsert every word:
- *      • New word  → create
- *      • Existing  → merge means (dedup by type) + merge relations (set-union)
- * 4. Mark the family record as savedToVocabulary = true.
- * 5. Return the final (merged) vocab entries.
+ * ADMIN ONLY — transforms a user's word family into global vocabulary entries.
+ *
+ * 1. Verify caller is admin.
+ * 2. Fetch the family record (still user-scoped).
+ * 3. Transform + upsert each word into the global vocabulary.
+ * 4. Mark the family as savedToVocabulary = true.
  */
 export const handler = withErrorHandling(async (event: APIGatewayProxyEvent) => {
-  const userId   = getUserId(event);
+  assertAdmin(event);
+  const userId   = getUserId(event);   // still needed to look up the family
   const familyId = event.pathParameters?.familyId;
 
   if (!familyId) {
     return response(400, { success: false, error: 'Missing familyId', code: 'VALIDATION_ERROR' });
   }
 
-  // 1. Load the family
+  // Fetch the user's family record
   const familyItem = await docClient.send(new GetCommand({
     TableName: TABLE,
     Key: {
@@ -46,10 +46,11 @@ export const handler = withErrorHandling(async (event: APIGatewayProxyEvent) => 
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const words: { word: string; type: string; mean: string }[] =
+  const words: { word: string; type: string; lang?: string; mean: string }[] =
     (familyItem.Item.words ?? []).map((w: any) => ({
       word: String(w.word),
       type: String(w.type),
+      lang: w.lang ? String(w.lang) : undefined,
       mean: String(w.mean),
     }));
 
@@ -57,10 +58,10 @@ export const handler = withErrorHandling(async (event: APIGatewayProxyEvent) => 
     return response(400, { success: false, error: 'Family has no words', code: 'VALIDATION_ERROR' });
   }
 
-  // 2 + 3. Transform and upsert
-  const vocabEntries = await useCases.saveFamilyToVocab(userId, familyId, words);
+  // Upsert into global vocabulary (no userId)
+  const vocabEntries = await useCases.saveFamilyToVocab(familyId, words);
 
-  // 4. Mark family as saved
+  // Mark family as saved (still user-scoped)
   await DynamoVocabularyRepository.markFamilySaved(userId, familyId);
 
   return response(200, {

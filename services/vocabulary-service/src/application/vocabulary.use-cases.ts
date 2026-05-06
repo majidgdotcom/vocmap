@@ -2,45 +2,27 @@ import { VocabEntry } from '@vocmap/shared';
 import { GetVocabQuery } from '@vocmap/shared';
 
 import { VocabularyDomain } from '../domain/vocabulary.domain';
-import {
-  IVocabularyRepository,
-  PaginatedVocab,
-} from './vocabulary.repository.interface';
+import { IVocabularyRepository, PaginatedVocab } from './vocabulary.repository.interface';
 
-interface RawWordEntry {
-  word: string;
-  type: string;
-  mean: string;
-}
+interface RawWordEntry { word: string; type: string; lang?: string; mean: string; }
 
 export class VocabularyUseCases {
   constructor(private readonly repo: IVocabularyRepository) {}
 
-  /**
-   * Transform a word-family's words into vocabulary entries and upsert them.
-   * Returns the final (merged) entries.
-   */
   async saveFamilyToVocab(
-    userId: string,
     familyId: string,
     words: RawWordEntry[],
   ): Promise<VocabEntry[]> {
-    const incoming = VocabularyDomain.fromFamily(userId, familyId, words);
+    const incoming = VocabularyDomain.fromFamily(familyId, words);
     return this.repo.upsertMany(incoming);
   }
 
-  async listVocab(
-    userId: string,
-    query: GetVocabQuery,
-  ): Promise<PaginatedVocab> {
-    return this.repo.findByUser(userId, query);
+  async listVocab(query: GetVocabQuery): Promise<PaginatedVocab> {
+    return this.repo.list(query);
   }
 
-  async getWord(
-    userId: string,
-    wordKey: string,
-  ): Promise<VocabEntry | null> {
-    return this.repo.findByWordKey(userId, wordKey);
+  async getWord(wordKey: string): Promise<VocabEntry | null> {
+    return this.repo.findByWordKey(wordKey);
   }
 }
 

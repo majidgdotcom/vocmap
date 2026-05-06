@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Vocabulary Service — upsert, list, look up, and Cambridge-enrich vocabulary entries
+Description: Vocabulary Service — public read, admin write, Cambridge enrichment
 
 Parameters:
   Environment:
@@ -40,13 +40,14 @@ Resources:
         AllowOrigin: "'*'"
         MaxAge: "'600'"
       Auth:
+        # Default authorizer applies to all routes unless overridden below
         DefaultAuthorizer: CognitoAuthorizer
         Authorizers:
           CognitoAuthorizer:
             UserPoolArn: !Ref CognitoUserPoolArn
         AddDefaultAuthorizerToCorsPreflight: false
 
-  # ── S3 bucket for audio files ────────────────────────────────────────────────
+  # ── S3 audio bucket ───────────────────────────────────────────────────────────
   AudioBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
@@ -78,7 +79,67 @@ Resources:
             Action: 's3:GetObject'
             Resource: !Sub '${AudioBucket.Arn}/*'
 
-  # ── POST /vocabulary/from-family/{familyId} ───────────────────────────────
+  # ══ PUBLIC read routes (no auth) ═════════════════════════════════════════════
+
+  # GET /vocabulary — public search + list
+  GetVocabularyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: services/vocabulary-service/src/handlers/get-vocabulary.handler
+      Timeout: 15
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref DynamoTableName
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VocabularyApi
+            Path: /vocabulary
+            Method: GET
+            Auth:
+              Authorizer: NONE   # ← public endpoint
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints: [services/vocabulary-service/src/handlers/get-vocabulary.ts]
+        Bundle: true
+        Minify: false
+        TreeShaking: true
+        Target: es2020
+        External: ['@aws-sdk/client-dynamodb', '@aws-sdk/lib-dynamodb']
+
+  # GET /vocabulary/{wordKey} — public word lookup
+  GetWordFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: services/vocabulary-service/src/handlers/get-word.handler
+      Timeout: 15
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref DynamoTableName
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VocabularyApi
+            Path: /vocabulary/{wordKey}
+            Method: GET
+            Auth:
+              Authorizer: NONE   # ← public endpoint
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints: [services/vocabulary-service/src/handlers/get-word.ts]
+        Bundle: true
+        Minify: false
+        TreeShaking: true
+        Target: es2020
+        External: ['@aws-sdk/client-dynamodb', '@aws-sdk/lib-dynamodb']
+
+  # ══ ADMIN-ONLY write routes (Cognito + assertAdmin) ═══════════════════════════
+
+  # POST /vocabulary/from-family/{familyId}
   SaveFamilyToVocabFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -103,59 +164,7 @@ Resources:
         Target: es2020
         External: ['@aws-sdk/client-dynamodb', '@aws-sdk/lib-dynamodb']
 
-  # ── GET /vocabulary ───────────────────────────────────────────────────────
-  GetVocabularyFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      Handler: services/vocabulary-service/src/handlers/get-vocabulary.handler
-      Timeout: 15
-      Policies:
-        - DynamoDBReadPolicy:
-            TableName: !Ref DynamoTableName
-      Events:
-        Api:
-          Type: Api
-          Properties:
-            RestApiId: !Ref VocabularyApi
-            Path: /vocabulary
-            Method: GET
-    Metadata:
-      BuildMethod: esbuild
-      BuildProperties:
-        EntryPoints: [services/vocabulary-service/src/handlers/get-vocabulary.ts]
-        Bundle: true
-        Minify: false
-        TreeShaking: true
-        Target: es2020
-        External: ['@aws-sdk/client-dynamodb', '@aws-sdk/lib-dynamodb']
-
-  # ── GET /vocabulary/{wordKey} ─────────────────────────────────────────────
-  GetWordFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      Handler: services/vocabulary-service/src/handlers/get-word.handler
-      Timeout: 15
-      Policies:
-        - DynamoDBReadPolicy:
-            TableName: !Ref DynamoTableName
-      Events:
-        Api:
-          Type: Api
-          Properties:
-            RestApiId: !Ref VocabularyApi
-            Path: /vocabulary/{wordKey}
-            Method: GET
-    Metadata:
-      BuildMethod: esbuild
-      BuildProperties:
-        EntryPoints: [services/vocabulary-service/src/handlers/get-word.ts]
-        Bundle: true
-        Minify: false
-        TreeShaking: true
-        Target: es2020
-        External: ['@aws-sdk/client-dynamodb', '@aws-sdk/lib-dynamodb']
-
-  # ── POST /vocabulary/{wordKey}/enrich ─────────────────────────────────────
+  # POST /vocabulary/{wordKey}/enrich
   EnrichVocabularyFunction:
     Type: AWS::Serverless::Function
     Properties:
