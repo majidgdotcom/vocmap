@@ -46,7 +46,7 @@ Resources:
         AttributeName: ttl
         Enabled: true
 
-  # ── Cognito ──────────────────────────────────────────────────────────────────
+  # ── Cognito User Pool ────────────────────────────────────────────────────────
   CognitoUserPool:
     Type: AWS::Cognito::UserPool
     Properties:
@@ -81,6 +81,26 @@ Resources:
       PreventUserExistenceErrors: ENABLED
       SupportedIdentityProviders:
         - COGNITO
+
+  # ── Cognito User Groups ──────────────────────────────────────────────────────
+  # The JWT IdToken will contain: cognito:groups: ["admin"] or ["user"]
+  # Both Lambda handlers and the frontend read this claim.
+
+  AdminGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: admin
+      UserPoolId: !Ref CognitoUserPool
+      Description: 'Admin users — full access to Word Families and Vocabulary dashboards'
+      Precedence: 1   # lower = higher priority when a user belongs to multiple groups
+
+  UserGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: user
+      UserPoolId: !Ref CognitoUserPool
+      Description: 'Regular users — user dashboard (future implementation)'
+      Precedence: 2
 
   # ── CloudWatch Log Groups ────────────────────────────────────────────────────
   WordFamilyServiceLogGroup:

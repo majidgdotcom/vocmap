@@ -41,3 +41,19 @@ export function getUserId(event: APIGatewayProxyEvent): string {
   if (!userId) throw new Error('FORBIDDEN: missing userId in JWT claims');
   return userId as string;
 }
+
+/**
+ * Reads cognito:groups from the JWT claims and throws FORBIDDEN
+ * if the caller is not a member of the "admin" group.
+ */
+export function assertAdmin(event: APIGatewayProxyEvent): void {
+  const claims = event.requestContext.authorizer?.claims ?? {};
+  const rawGroups = claims['cognito:groups'] ?? '';
+  const groups: string[] = Array.isArray(rawGroups)
+    ? rawGroups
+    : String(rawGroups).split(',').map((g: string) => g.trim()).filter(Boolean);
+
+  if (!groups.includes('admin')) {
+    throw new Error('FORBIDDEN: admin access required');
+  }
+}

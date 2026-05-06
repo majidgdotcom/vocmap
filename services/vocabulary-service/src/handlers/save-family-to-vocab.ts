@@ -6,7 +6,7 @@ import { Keys } from '@vocmap/shared';
 
 import { VocabularyUseCases } from '../application/vocabulary.use-cases';
 import { DynamoVocabularyRepository } from '../infrastructure/dynamo-vocabulary.repository';
-import { getUserId, response, withErrorHandling } from './vocab-base';
+import { getUserId, response, withErrorHandling, assertAdmin } from './vocab-base';
 
 const docClient = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const TABLE     = process.env.DYNAMO_TABLE!;

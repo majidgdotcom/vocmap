@@ -4,7 +4,7 @@ import { BatchSaveFamiliesSchema } from '@vocmap/shared';
 
 import { WordFamilyUseCases } from '../application/word-family.use-cases';
 import { DynamoWordFamilyRepository } from '../infrastructure/dynamo-word-family.repository';
-import { getUserId, response, withErrorHandling } from './_base';
+import { getUserId, response, withErrorHandling, assertAdmin } from './_base';
 
 const useCases = new WordFamilyUseCases(new DynamoWordFamilyRepository());
 
@@ -18,7 +18,8 @@ const useCases = new WordFamilyUseCases(new DynamoWordFamilyRepository());
  */
 export const handler = withErrorHandling(
   async (event: APIGatewayProxyEvent) => {
-    const userId = getUserId(event);
+    assertAdmin(event);
+  const userId = getUserId(event);
 
     const body = BatchSaveFamiliesSchema.parse(
       JSON.parse(event.body ?? '{}'),

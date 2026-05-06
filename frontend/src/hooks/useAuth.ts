@@ -1,18 +1,22 @@
-import { useCurrentUser, useSignIn, useSignOut } from '@/services/auth.service';
+import { useCurrentUser, useSignIn, useSignOut, useUserGroups } from '@/services/auth.service';
 
 export function useAuth() {
-  const { data: user, isLoading, error } = useCurrentUser();
-  const signIn = useSignIn();
+  const { data: user, isLoading: userLoading, error } = useCurrentUser();
+  const { data: groups = [], isLoading: groupsLoading }  = useUserGroups();
+  const signIn  = useSignIn();
   const signOut = useSignOut();
 
   return {
     user,
     isAuthenticated: !!user,
-    isLoading,
+    isLoading:       userLoading || groupsLoading,
     error,
-    signIn: signIn.mutateAsync,
-    signOut: signOut.mutateAsync,
-    isSigningIn: signIn.isPending,
-    isSigningOut: signOut.isPending,
+    groups,
+    isAdmin:         groups.includes('admin'),
+    isUser:          groups.includes('user'),
+    signIn:          signIn.mutateAsync,
+    signOut:         signOut.mutateAsync,
+    isSigningIn:     signIn.isPending,
+    isSigningOut:    signOut.isPending,
   };
 }

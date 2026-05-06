@@ -5,9 +5,11 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 
 import { configureAmplify } from '@/config/amplify';
 import { ProtectedRoute } from '@/components/common/ProtectedRoute';
-import { LoginPage } from '@/pages/LoginPage';
-import { WordFamilyPage } from '@/pages/WordFamilyPage';
-import { VocabularyPage } from '@/pages/VocabularyPage';
+import { LoginPage }           from '@/pages/LoginPage';
+import { WordFamilyPage }      from '@/pages/WordFamilyPage';
+import { VocabularyPage }      from '@/pages/VocabularyPage';
+import { UserDashboardPage }   from '@/pages/UserDashboardPage';
+import { UnauthorizedPage }    from '@/pages/UnauthorizedPage';
 
 configureAmplify();
 
@@ -29,15 +31,39 @@ const App: React.FC = () => (
   <QueryClientProvider client={queryClient}>
     <BrowserRouter>
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
+        {/* Public */}
+        <Route path="/login"        element={<LoginPage />} />
+        <Route path="/unauthorized" element={<UnauthorizedPage />} />
+
+        {/* Admin-only routes */}
         <Route
           path="/word-families"
-          element={<ProtectedRoute><WordFamilyPage /></ProtectedRoute>}
+          element={
+            <ProtectedRoute adminOnly>
+              <WordFamilyPage />
+            </ProtectedRoute>
+          }
         />
         <Route
           path="/vocabulary"
-          element={<ProtectedRoute><VocabularyPage /></ProtectedRoute>}
+          element={
+            <ProtectedRoute adminOnly>
+              <VocabularyPage />
+            </ProtectedRoute>
+          }
         />
+
+        {/* User routes (future — currently placeholder) */}
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <UserDashboardPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Default: admins land on /word-families, others on /dashboard */}
         <Route path="*" element={<Navigate to="/word-families" replace />} />
       </Routes>
     </BrowserRouter>

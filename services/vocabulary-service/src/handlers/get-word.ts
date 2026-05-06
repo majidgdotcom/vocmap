@@ -1,7 +1,7 @@
 import { APIGatewayProxyEvent } from 'aws-lambda';
 import { VocabularyUseCases } from '../application/vocabulary.use-cases';
 import { DynamoVocabularyRepository } from '../infrastructure/dynamo-vocabulary.repository';
-import { getUserId, response, withErrorHandling } from './vocab-base';
+import { getUserId, response, withErrorHandling, assertAdmin } from './vocab-base';
 
 const useCases = new VocabularyUseCases(new DynamoVocabularyRepository());
 

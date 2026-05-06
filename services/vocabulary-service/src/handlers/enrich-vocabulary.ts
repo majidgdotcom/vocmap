@@ -16,7 +16,7 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { Keys, normalizeWordKey } from '@vocmap/shared';
 
 import { scrapeCambridgeWord, WordNotFoundError, WordNotAvailableError } from '../scraper/cambridge.scraper';
-import { getUserId, response, withErrorHandling } from './vocab-base';
+import { getUserId, response, withErrorHandling, assertAdmin } from './vocab-base';
 
 const dynamo  = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const s3      = new S3Client({ region: process.env.AWS_REGION ?? 'us-east-1' });
@@ -24,6 +24,7 @@ const TABLE   = process.env.DYNAMO_TABLE!;
 const BUCKET  = process.env.AUDIO_BUCKET!;
 
 export const handler = withErrorHandling(async (event: APIGatewayProxyEvent) => {
+  assertAdmin(event);
   const userId  = getUserId(event);
   const wordKey = event.pathParameters?.wordKey;
 
