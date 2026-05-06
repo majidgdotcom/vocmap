@@ -565,13 +565,12 @@ function SavedFamiliesPanel() {
   const [confirmId,   setConfirmId]   = useState<string | null>(null);
   const [vocabFilter, setVocabFilter] = useState<VocabFilter>('all');
 
+  // useMemo must be called unconditionally — before any early returns
+  const allEntities: WordFamilyEntity[] = data?.pages.flatMap(p => p.data) ?? [];
+  const allVMs = useMemo(() => allEntities.map(toWordFamilyViewModel), [allEntities]);
+
   if (isLoading) return <div style={{ fontSize: 13, color: '#aaa', padding: '20px 0', textAlign: 'center' }}>Loading saved families…</div>;
   if (isError)   return <div style={{ fontSize: 13, color: '#993C1D', padding: '20px 0' }}>Failed to load saved families.</div>;
-
-  const allEntities: WordFamilyEntity[] = data?.pages.flatMap(p => p.data) ?? [];
-
-  // ViewModel transformation — presentation logic lives here, not in the component
-  const allVMs = useMemo(() => allEntities.map(toWordFamilyViewModel), [allEntities]);
 
   const inVocab    = allVMs.filter(vm =>  vm.isSavedToVocabulary);
   const notInVocab = allVMs.filter(vm => !vm.isSavedToVocabulary);
